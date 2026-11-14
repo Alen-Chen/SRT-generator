@@ -39,6 +39,11 @@ padding:2px 8px;border-radius:99px}
 .fitem .fname{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .fitem .fsz{color:#667085;font-size:12px}
 .fitem .rm{border:0;background:none;color:#b91c1c;font-size:15px;cursor:pointer;padding:0 4px}
+.fitem .grip{cursor:grab;color:#98a2b3;font-size:14px;white-space:nowrap}
+.fitem .mv{border:0;background:none;color:#475467;font-size:11px;cursor:pointer;padding:0 3px}
+.fitem .mv:disabled{color:#cdd5df;cursor:default}
+.fitem.dragover{border-color:var(--acc);background:var(--acc2);border-style:dashed}
+.fitem.dragging{opacity:.4}
 .muted{color:#667085;font-size:13px}
 .opts{display:flex;gap:22px;flex-wrap:wrap;margin:16px 0;align-items:center;font-size:14px}
 .opts label{display:flex;align-items:center;gap:8px}
@@ -103,6 +108,7 @@ border-left:1px solid var(--line);padding-left:12px}
       <input type="file" id="file" accept="video/*,.mkv,.ts" multiple>
     </div>
     <div id="fileList" class="hidden"></div>
+    <p class="muted hidden" id="orderHint" data-i18n="orderHint"></p>
     <div class="opts">
       <label><span data-i18n="model"></span>
         <select id="model">
@@ -177,7 +183,7 @@ sens: "Page sensitivity",
 start: "Start processing", preparing: "Preparing…",
 repag: "Repaginate", repagTip: "Reuse the transcript and re-split pages with a new sensitivity",
 apply: "Apply", dlSrt: "Download SRT", dlMd: "Download Markdown", dlVideo: "Download merged video", back: "Back to upload",
-mergeNote: "{n} files selected (total {mb}); they will be merged into one video before transcription", removeFile: "Remove", step_merge: "Merging videos",
+mergeNote: "{n} files selected (total {mb}); they will be merged into one video before transcription", removeFile: "Remove", moveUp: "Move up", moveDown: "Move down", dragToSort: "Drag to reorder", orderHint: "Drag rows or use ▲ ▼ to set the merge order", step_merge: "Merging videos",
 noThumb: "No thumbnail", noSpeech: "(no speech on this page)", pageN: "Page %d",
 vmeta: "File: {f} | Duration: {d} | Language: {l} | {n} pages",
 uploadFail: "Upload failed: ", repagFail: "Repagination failed: ",
@@ -204,7 +210,7 @@ sens: "分頁敏感度",
 start: "開始處理", preparing: "準備中…",
 repag: "重新分頁", repagTip: "沿用轉錄結果，依新敏感度重新切頁",
 apply: "套用", dlSrt: "下載 SRT", dlMd: "下載 Markdown", dlVideo: "下載合併影片", back: "回到上傳",
-mergeNote: "已選 {n} 個檔案（共 {mb}），轉錄前將先合併為一支影片", removeFile: "移除", step_merge: "合併影片",
+mergeNote: "已選 {n} 個檔案（共 {mb}），轉錄前將先合併為一支影片", removeFile: "移除", moveUp: "上移", moveDown: "下移", dragToSort: "拖曳調整順序", orderHint: "拖曳清單列或用 ▲▼ 設定合併順序", step_merge: "合併影片",
 noThumb: "無縮圖", noSpeech: "（此頁無語音）", pageN: "第 %d 頁",
 vmeta: "檔案：{f}｜長度：{d}｜語言：{l}｜共 {n} 頁",
 uploadFail: "上傳失敗：", repagFail: "重新分頁失敗：",
@@ -231,7 +237,7 @@ sens: "分页敏感度",
 start: "开始处理", preparing: "准备中…",
 repag: "重新分页", repagTip: "沿用转录结果，按新敏感度重新切页",
 apply: "应用", dlSrt: "下载 SRT", dlMd: "下载 Markdown", dlVideo: "下载合并视频", back: "返回上传",
-mergeNote: "已选 {n} 个文件（共 {mb}），转录前将先合并为一个视频", removeFile: "移除", step_merge: "合并视频",
+mergeNote: "已选 {n} 个文件（共 {mb}），转录前将先合并为一个视频", removeFile: "移除", moveUp: "上移", moveDown: "下移", dragToSort: "拖拽调整顺序", orderHint: "拖拽列表行或用 ▲▼ 设置合并顺序", step_merge: "合并视频",
 noThumb: "无缩图", noSpeech: "（本页无语音）", pageN: "第 %d 页",
 vmeta: "文件：{f}｜时长：{d}｜语言：{l}｜共 {n} 页",
 uploadFail: "上传失败：", repagFail: "重新分页失败：",
@@ -258,7 +264,7 @@ sens: "ページ分割感度",
 start: "処理を開始", preparing: "準備中…",
 repag: "再ページ区切り", repagTip: "既存の文字起こしを再利用し、新しい感度でページを再分割します",
 apply: "適用", dlSrt: "SRT をダウンロード", dlMd: "Markdown をダウンロード", dlVideo: "結合後の動画をダウンロード", back: "アップロードに戻る",
-mergeNote: "{n} 個のファイルを選択中（合計 {mb}）。文字起こし前に1本の動画へ結合します", removeFile: "削除", step_merge: "動画を結合",
+mergeNote: "{n} 個のファイルを選択中（合計 {mb}）。文字起こし前に1本の動画へ結合します", removeFile: "削除", moveUp: "上へ", moveDown: "下へ", dragToSort: "ドラッグで並び替え", orderHint: "行をドラッグまたは ▲▼ で結合順を設定", step_merge: "動画を結合",
 noThumb: "サムネイルなし", noSpeech: "（このページに音声はありません）", pageN: "%d ページ目",
 vmeta: "ファイル：{f}｜再生時間：{d}｜言語：{l}｜全 {n} ページ",
 uploadFail: "アップロード失敗：", repagFail: "再ページ区切り失敗：",
@@ -338,6 +344,7 @@ $("file").addEventListener("change", () => {
 });
 for (const ev of ["dragover", "dragleave", "drop"]) {
   $("drop").addEventListener(ev, (e) => {
+    if (!e.dataTransfer.types.includes("Files")) return;
     e.preventDefault();
     $("drop").classList.toggle("over", ev === "dragover");
     if (ev === "drop") setFiles(Array.from(e.dataTransfer.files));
@@ -348,23 +355,46 @@ function setFiles(list) {
     f && (f.type.startsWith("video/") || /\.(mp4|mkv|webm|mov|avi|flv|m4v|ts|mpg|mpeg|wmv)$/i.test(f.name)));
   renderFileList();
 }
+let dragIdx = null;
+function moveFile(from, to) {
+  if (to < 0 || to >= pickedFiles.length) return;
+  const [x] = pickedFiles.splice(from, 1);
+  pickedFiles.splice(to, 0, x);
+  renderFileList();
+}
 function renderFileList() {
   const host = $("fileList");
   host.innerHTML = "";
   const n = pickedFiles.length;
   host.classList.toggle("hidden", n === 0);
+  $("orderHint").classList.toggle("hidden", n < 2);
   pickedFiles.forEach((f, i) => {
     const row = document.createElement("div");
     row.className = "fitem";
-    const name = document.createElement("span");
-    name.className = "fname";
-    name.textContent = f.name;
+    const grip = document.createElement("span");
+    grip.className = "grip hidden";
+    grip.textContent = "⋮⋮";
+    grip.title = t("dragToSort");
     const num = document.createElement("span");
     num.className = "fnum";
     num.textContent = "#" + (i + 1);
+    const name = document.createElement("span");
+    name.className = "fname";
+    name.textContent = f.name;
     const sz = document.createElement("span");
     sz.className = "fsz";
     sz.textContent = (f.size / 1048576).toFixed(1) + " MB";
+    const mv = (up, label, dis) => {
+      const b = document.createElement("button");
+      b.className = "mv";
+      b.textContent = label;
+      b.title = up ? t("moveUp") : t("moveDown");
+      b.disabled = dis;
+      b.addEventListener("click", () => moveFile(i, up ? i - 1 : i + 1));
+      return b;
+    };
+    const upBtn = mv(true, "▲", i === 0);
+    const downBtn = mv(false, "▼", i === n - 1);
     const rm = document.createElement("button");
     rm.className = "rm";
     rm.title = t("removeFile");
@@ -373,7 +403,33 @@ function renderFileList() {
       pickedFiles.splice(i, 1);
       renderFileList();
     });
-    row.append(num, name, sz, rm);
+    if (n > 1) {
+      grip.classList.remove("hidden");
+      row.draggable = true;
+      row.addEventListener("dragstart", () => {
+        dragIdx = i;
+        row.classList.add("dragging");
+      });
+      row.addEventListener("dragover", (e) => {
+        if (dragIdx !== null && dragIdx !== i) {
+          e.preventDefault();
+          row.classList.add("dragover");
+        }
+      });
+      row.addEventListener("dragleave", () => row.classList.remove("dragover"));
+      row.addEventListener("drop", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        row.classList.remove("dragover");
+        if (dragIdx !== null && dragIdx !== i) moveFile(dragIdx, i);
+        dragIdx = null;
+      });
+      row.addEventListener("dragend", () => {
+        row.classList.remove("dragging");
+        dragIdx = null;
+      });
+    }
+    row.append(grip, num, name, sz, upBtn, downBtn, rm);
     host.appendChild(row);
   });
   if (n === 1) {
