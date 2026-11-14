@@ -245,6 +245,8 @@ mergeNote: "{n} files selected (total {mb}); they will be merged into one video 
 noThumb: "No thumbnail", noSpeech: "(no speech on this page)", pageN: "Page %d",
 vmeta: "File: {f} | Duration: {d} | Language: {l} | {n} pages",
 uploadFail: "Upload failed: ", repagFail: "Repagination failed: ",
+uploading: "Uploading video", uploadDone: "Upload complete, starting job…",
+netErr: "Network error",
 procFail: "Processing failed: ", unknownErr: "Unknown error", processing: "Processing",
 st_queued: "Queued", st_running: "Running", st_done: "Done", st_error: "Error",
 step_preparing: "Preparing", step_reading: "Reading video info",
@@ -284,6 +286,8 @@ mergeNote: "已選 {n} 個檔案（共 {mb}），轉錄前將先合併為一支�
 noThumb: "無縮圖", noSpeech: "（此頁無語音）", pageN: "第 %d 頁",
 vmeta: "檔案：{f}｜長度：{d}｜語言：{l}｜共 {n} 頁",
 uploadFail: "上傳失敗：", repagFail: "重新分頁失敗：",
+uploading: "上傳影片中", uploadDone: "上傳完成，開始處理…",
+netErr: "網路錯誤",
 procFail: "處理失敗：", unknownErr: "未知錯誤", processing: "處理中",
 st_queued: "排隊中", st_running: "執行中", st_done: "完成", st_error: "錯誤",
 step_preparing: "準備中", step_reading: "讀取影片資訊",
@@ -323,6 +327,8 @@ mergeNote: "已选 {n} 个文件（共 {mb}），转录前将先合并为一个�
 noThumb: "无缩图", noSpeech: "（本页无语音）", pageN: "第 %d 页",
 vmeta: "文件：{f}｜时长：{d}｜语言：{l}｜共 {n} 页",
 uploadFail: "上传失败：", repagFail: "重新分页失败：",
+uploading: "上传视频中", uploadDone: "上传完成，开始处理…",
+netErr: "网络错误",
 procFail: "处理失败：", unknownErr: "未知错误", processing: "处理中",
 st_queued: "排队中", st_running: "运行中", st_done: "完成", st_error: "错误",
 step_preparing: "准备中", step_reading: "读取视频信息",
@@ -362,6 +368,8 @@ mergeNote: "{n} 個のファイルを選択中（合計 {mb}）。文字起こ�
 noThumb: "サムネイルなし", noSpeech: "（このページに音声はありません）", pageN: "%d ページ目",
 vmeta: "ファイル：{f}｜再生時間：{d}｜言語：{l}｜全 {n} ページ",
 uploadFail: "アップロード失敗：", repagFail: "再ページ区切り失敗：",
+uploading: "動画をアップロード中", uploadDone: "アップロード完了、処理を開始…",
+netErr: "ネットワークエラー",
 procFail: "処理失敗：", unknownErr: "不明なエラー", processing: "処理中",
 st_queued: "待機中", st_running: "実行中", st_done: "完了", st_error: "エラー",
 step_preparing: "準備中", step_reading: "動画情報の読み取り",
@@ -584,15 +592,49 @@ $("submit").addEventListener("click", async () => {
   fd.append("language", $("lang").value);
   fd.append("scene_threshold", $("scene").value);
   fd.append("correct", $("correct").checked ? "1" : "0");
+  $("uploadCard").classList.add("hidden");
+  $("progressCard").classList.remove("hidden");
+  const setUp = (stepKey, frac) => {
+    $("progStep").textContent = t(stepKey);
+    $("progFill").style.width = Math.round(frac * 100) + "%";
+    $("progPct").textContent = Math.round(frac * 100) + "%";
+    $("progNote").textContent = "";
+  };
+  setUp("uploading", 0);
   try {
-    const r = await api("/api/jobs", { method: "POST", body: fd });
-    if (!r.ok) throw new Error((await r.json()).detail || r.status);
-    poll((await r.json()).id);
+    const id = await uploadJob(fd, (frac) => setUp(frac >= 1 ? "uploadDone" : "uploading", frac));
+    poll(id);
   } catch (e) {
+    $("progressCard").classList.add("hidden");
+    $("uploadCard").classList.remove("hidden");
     $("upErr").textContent = t("uploadFail") + e.message;
     $("submit").disabled = false;
   }
 });
+
+function uploadJob(fd, onProgress) {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", "/api/jobs");
+    xhr.upload.addEventListener("progress", (ev) => {
+      if (ev.lengthComputable) onProgress(ev.loaded / Math.max(ev.total, 1));
+    });
+    xhr.addEventListener("load", () => {
+      if (xhr.status === 401) { showAuth(); reject(new Error(t("sessionExpired"))); return; }
+      if (xhr.status < 200 || xhr.status >= 300) {
+        let msg = xhr.statusText || String(xhr.status);
+        try { msg = JSON.parse(xhr.responseText).detail || msg; } catch (e) { /* ignore */ }
+        reject(new Error(msg));
+        return;
+      }
+      try { resolve(JSON.parse(xhr.responseText).id); }
+      catch (e) { reject(new Error(t("unknownErr"))); }
+    });
+    xhr.addEventListener("error", () => reject(new Error(t("netErr"))));
+    xhr.addEventListener("abort", () => reject(new Error(t("netErr"))));
+    xhr.send(fd);
+  });
+}
 
 const statusLabel = (s) =>
   I18N[CUR]["st_" + s] || I18N.en["st_" + s] || s;
