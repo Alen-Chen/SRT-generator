@@ -18,7 +18,9 @@ clickable to seek the video; SRT / Markdown exports are available.
     (homophones, split/merged words, punctuation); corrected text is saved back
     into `segments.json` so re-pagination reuses it
 5. Each page's text is sent to an OpenAI-compatible `/v1/chat/completions` endpoint
-   to generate per-page topic titles and an overall course title
+   to generate per-page topic titles, an overall course title, and a bilingual
+   (Chinese/English) title + summary shown in the right-hand history panel
+   (summaries are collapsed; click to expand; older jobs backfill on first view)
 6. Outputs: page-by-page transcript, page thumbnails, `full.srt`, `transcript.md`
 
 Speech transcription always runs locally; the LLM API is used for transcript
@@ -97,6 +99,8 @@ All `/api/jobs*` endpoints require a signed-in session cookie (401 otherwise).
   `POST /api/auth/logout`, `GET /api/auth/me`
 - `GET /api/admin/users`, `POST /api/admin/users/{id}/role`,
   `POST /api/admin/users/{id}/status` (admin only)
+- `POST /api/jobs/{id}/meta` — generate bilingual (Chinese/English) title and
+  summary from the transcript (used by the history panel; cached in the job)
 - `POST /api/jobs` (multipart: `files` (repeatable), `model`, `language`,
   `scene_threshold`
   (default 0.03); optional `reuse_from`=<job id> to reuse a transcript and only

@@ -18,12 +18,28 @@ header h1{font-size:18px;margin:0;font-weight:700}
 header h1 .hl{color:#7fb0ff}
 #uiLang{background:#1d2b40;color:#cdd9ea;border:1px solid #33415c;border-radius:8px;
 padding:4px 8px;font:inherit;font-size:12px;cursor:pointer}
-#history{margin-left:auto;display:flex;gap:8px;flex-wrap:wrap}
-#history button{background:#1d2b40;color:#cdd9ea;border:1px solid #33415c;
-border-radius:99px;padding:4px 12px;font-size:12px;cursor:pointer;max-width:220px;
-overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-#history button:hover{background:#2a3c5c}
-main{max-width:1150px;margin:24px auto 60px;padding:0 16px}
+main{max-width:1210px;margin:24px auto 60px;padding:0 16px;display:grid;
+ grid-template-columns:minmax(0,1fr) 330px;column-gap:24px;align-items:start}
+main>section{grid-column:1}
+#historyPanel{grid-column:2;grid-row:1/span 8;position:sticky;top:80px}
+#historyPanel h3{margin:0 0 10px;font-size:14px}
+#history{display:flex;flex-direction:column;gap:10px;
+ max-height:calc(100vh - 110px);overflow-y:auto;padding-right:2px}
+.hitem{background:var(--card);border:1px solid var(--line);border-radius:12px;
+ padding:10px 13px;cursor:pointer}
+.hitem:hover{border-color:#8aa6c9}
+.hdate{font-size:11px;color:#64748b;font-weight:600}
+.ht1{font-size:14px;font-weight:700;margin:2px 0 0}
+.ht2{font-size:12.5px;color:#475569;margin:1px 0 0}
+.hsum{font-size:12.5px;color:#475569;margin:6px 0 0;
+ display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.hsum .szh,.hsum .sen{display:block}
+.hsum .sen{font-style:italic;color:#5b6b80;margin-top:3px}
+.hitem.open .hsum{display:block;-webkit-line-clamp:unset;overflow:visible}
+.hfoot{display:flex;justify-content:space-between;align-items:center;gap:8px;
+ margin-top:6px;font-size:11px;color:#94a3b8}
+.htog{background:none;border:none;color:#2563eb;font:inherit;font-size:11.5px;
+ cursor:pointer;padding:0;white-space:nowrap}
 .card{background:var(--card);border:1px solid var(--line);border-radius:14px;
 padding:20px 22px;box-shadow:0 1px 3px rgba(16,24,40,.06)}
 .hidden{display:none!important}
@@ -63,7 +79,10 @@ transition:width .5s}
 text-decoration:none;border:1px solid var(--line);background:#fff;color:var(--ink);cursor:pointer}
 .actions a.dl{border-color:var(--acc);color:var(--acc)}
 .layout{display:grid;grid-template-columns:minmax(320px,5fr) minmax(380px,7fr);gap:18px}
-@media(max-width:900px){.layout{grid-template-columns:1fr}}
+@media(max-width:900px){.layout{grid-template-columns:1fr}
+main{grid-template-columns:1fr}
+#historyPanel{grid-column:1;grid-row:auto;position:static;order:-1;margin-bottom:20px}
+#history{max-height:270px;flex-direction:column}}
 .vwrap{position:sticky;top:70px;align-self:start}
 video{width:100%;border-radius:12px;background:#000;max-height:340px}
 #vmeta{font-size:13px;color:#667085;margin-top:6px}
@@ -122,7 +141,6 @@ border-radius:8px;background:var(--acc2);color:var(--acc);cursor:pointer}
     <option value="zh-CN">简体中文</option>
     <option value="ja">日本語</option>
   </select>
-  <nav id="history"></nav>
   <div id="userBox" class="hidden">
     <span id="uNameLbl"></span>
     <span class="rbadge" id="uRoleLbl"></span>
@@ -147,6 +165,10 @@ border-radius:8px;background:var(--acc2);color:var(--acc);cursor:pointer}
     <p class="muted" id="authMsg"></p>
     <p class="muted" id="firstNote" data-i18n="firstNote"></p>
   </section>
+  <aside id="historyPanel" class="hidden">
+    <h3 data-i18n="historyTitle"></h3>
+    <div id="history"></div>
+  </aside>
   <section id="uploadCard" class="card hidden">
     <div class="drop" id="drop">
       <p data-i18n-html="drop"></p>
@@ -247,6 +269,7 @@ vmeta: "File: {f} | Duration: {d} | Language: {l} | {n} pages",
 uploadFail: "Upload failed: ", repagFail: "Repagination failed: ",
 uploading: "Uploading video", uploadDone: "Upload complete, starting job…",
 netErr: "Network error",
+historyTitle: "History", expand: "Show more", collapse: "Show less",
 procFail: "Processing failed: ", unknownErr: "Unknown error", processing: "Processing",
 st_queued: "Queued", st_running: "Running", st_done: "Done", st_error: "Error",
 step_preparing: "Preparing", step_reading: "Reading video info",
@@ -288,6 +311,7 @@ vmeta: "檔案：{f}｜長度：{d}｜語言：{l}｜共 {n} 頁",
 uploadFail: "上傳失敗：", repagFail: "重新分頁失敗：",
 uploading: "上傳影片中", uploadDone: "上傳完成，開始處理…",
 netErr: "網路錯誤",
+historyTitle: "使用歷史", expand: "展開", collapse: "收起",
 procFail: "處理失敗：", unknownErr: "未知錯誤", processing: "處理中",
 st_queued: "排隊中", st_running: "執行中", st_done: "完成", st_error: "錯誤",
 step_preparing: "準備中", step_reading: "讀取影片資訊",
@@ -329,6 +353,7 @@ vmeta: "文件：{f}｜时长：{d}｜语言：{l}｜共 {n} 页",
 uploadFail: "上传失败：", repagFail: "重新分页失败：",
 uploading: "上传视频中", uploadDone: "上传完成，开始处理…",
 netErr: "网络错误",
+historyTitle: "使用历史", expand: "展开", collapse: "收起",
 procFail: "处理失败：", unknownErr: "未知错误", processing: "处理中",
 st_queued: "排队中", st_running: "运行中", st_done: "完成", st_error: "错误",
 step_preparing: "准备中", step_reading: "读取视频信息",
@@ -370,6 +395,7 @@ vmeta: "ファイル：{f}｜再生時間：{d}｜言語：{l}｜全 {n} ペー�
 uploadFail: "アップロード失敗：", repagFail: "再ページ区切り失敗：",
 uploading: "動画をアップロード中", uploadDone: "アップロード完了、処理を開始…",
 netErr: "ネットワークエラー",
+historyTitle: "履歴", expand: "開く", collapse: "閉じる",
 procFail: "処理失敗：", unknownErr: "不明なエラー", processing: "処理中",
 st_queued: "待機中", st_running: "実行中", st_done: "完了", st_error: "エラー",
 step_preparing: "準備中", step_reading: "動画情報の読み取り",
@@ -734,18 +760,56 @@ $("back").addEventListener("click", () => {
   loadHistory();
 });
 
+const metaBusy = new Set();
+
+function fmtDate(iso) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (isNaN(d)) return iso.slice(0, 10);
+  return d.toLocaleDateString(HTML_LANG[CUR] || CUR) + " " +
+    d.toLocaleTimeString(HTML_LANG[CUR] || CUR, { hour: "2-digit", minute: "2-digit" });
+}
+
 async function loadHistory() {
   try {
     const items = await (await api("/api/jobs")).json();
-    const nav = $("history");
-    nav.innerHTML = "";
-    for (const it of items.slice(0, 8)) {
-      const b = document.createElement("button");
-      b.textContent = it.title || it.filename;
-      const own = ME && ME.role === "admin" && it.owner ? " · " + it.owner : "";
-      b.title = `${it.filename} (${statusLabel(it.status)})${own}`;
-      b.addEventListener("click", () => pollOpen(it.id));
-      nav.appendChild(b);
+    const box = $("history");
+    box.innerHTML = "";
+    for (const it of items) {
+      const card = document.createElement("div");
+      card.className = "hitem";
+      const m = it.meta;
+      const own = ME && ME.role === "admin" && it.owner ? " · " + esc(it.owner) : "";
+      const foot = esc(it.filename) + " · " + esc(statusLabel(it.status)) + own +
+        (it.pages ? " · " + it.pages + "p" : "");
+      let inner = `<div class="hdate">${esc(fmtDate(it.created_at))}</div>`;
+      inner += `<div class="ht1">${esc((m && m.title_zh) || it.title || it.filename)}</div>`;
+      if (m && m.title_en) inner += `<div class="ht2">${esc(m.title_en)}</div>`;
+      if (m && (m.summary_zh || m.summary_en)) {
+        inner += `<div class="hsum"><span class="szh">${esc(m.summary_zh || "")}</span>` +
+          `<span class="sen">${esc(m.summary_en || "")}</span></div>`;
+      }
+      inner += `<div class="hfoot"><span>${foot}</span>` +
+        ((m && (m.summary_zh || m.summary_en))
+          ? `<button class="htog" data-i18n="expand"></button>` : "") + `</div>`;
+      card.innerHTML = inner;
+      card.addEventListener("click", () => pollOpen(it.id));
+      const tog = card.querySelector(".htog");
+      if (tog) {
+        tog.textContent = t("expand");
+        tog.addEventListener("click", (e) => {
+          e.stopPropagation();
+          const open = card.classList.toggle("open");
+          tog.textContent = t(open ? "collapse" : "expand");
+        });
+      }
+      if (it.status === "done" && !m && !metaBusy.has(it.id)) {
+        metaBusy.add(it.id);
+        api("/api/jobs/" + it.id + "/meta", { method: "POST" })
+          .then((r) => { if (r.ok) loadHistory(); })
+          .catch(() => { /* ignore */ });
+      }
+      box.appendChild(card);
     }
   } catch (e) { /* ignore */ }
 }
@@ -772,6 +836,7 @@ function showAuth() {
   $("userBox").classList.add("hidden");
   $("usersModal").classList.add("hidden");
   for (const id of ["uploadCard", "progressCard", "result"]) $(id).classList.add("hidden");
+  $("historyPanel").classList.add("hidden");
   $("authErr").textContent = "";
   $("authMsg").textContent = "";
   $("authCard").classList.remove("hidden");
@@ -783,6 +848,8 @@ function renderUserBox() {
   $("uRoleLbl").textContent = ME.role === "admin" ? t("role_admin") : t("role_user");
   $("btnUsers").classList.toggle("hidden", ME.role !== "admin");
   $("userBox").classList.remove("hidden");
+  $("historyPanel").classList.remove("hidden");
+  loadHistory();
 }
 
 async function doAuth(url) {

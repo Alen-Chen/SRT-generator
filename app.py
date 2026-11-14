@@ -439,6 +439,32 @@ def correct_page(i: int, page: dict, pages: list[dict]) -> int:
     return changed
 
 
+def job_meta(text: str) -> dict | None:
+    out = chat(
+        "Below is material from a lecture video transcript (page titles and/or "
+        "numbered subtitle lines). Reply with ONLY a JSON object having exactly "
+        "these four string keys:\n"
+        'title_zh: concise Chinese title of the lecture (<= 24 chars)\n'
+        'title_en: concise English title of the lecture (<= 60 chars)\n'
+        'summary_zh: 2-4 sentence Chinese summary of the lecture\n'
+        'summary_en: the same summary in English (2-4 sentences)\n\n'
+        + text,
+        max_tokens=500, temperature=0.2)
+    if not out:
+        return None
+    m = re.search(r"\{.*\}", out, re.S)
+    if not m:
+        return None
+    try:
+        d = json.loads(m.group())
+    except Exception:  # noqa: BLE001
+        return None
+    keys = ("title_zh", "title_en", "summary_zh", "summary_en")
+    if not all(isinstance(d.get(k), str) and d[k].strip() for k in keys):
+        return None
+    return {k: d[k].strip() for k in keys}
+
+
 def video_title(pages: list[dict], filename: str) -> str:
     joined = "; ".join(p.get("title", "") for p in pages)[:2000]
     if not joined.strip():
@@ -533,6 +559,10 @@ def run_job(job_id: str) -> None:
         set_progress(job_id, "Generating course title", 0.985)
         result["title"] = video_title(pages, job["filename"])
         result["pages"] = pages
+        result["meta"] = job_meta("\n".join(
+            f"{p.get('title') or ''}: "
+            + " ".join(s["text"] for s in p["segments"])[:150]
+            for p in pages)[:4500])
 
         (outdir / "full.srt").write_text(to_srt(result["segments"]), encoding="utf-8")
         with jobs_lock:
@@ -650,6 +680,7 @@ def list_jobs(request: Request) -> JSONResponse:
         "created_at": j["created_at"],
         "owner": (users.get(j.get("owner") or "", {}) or {}).get("username"),
         "title": (j.get("result") or {}).get("title"),
+        "meta": (j.get("result") or {}).get("meta"),
         "pages": len((j.get("result") or {}).get("pages", [])),
         "duration": (j.get("result") or {}).get("duration"),
     } for j in items])
@@ -658,6 +689,30 @@ def list_jobs(request: Request) -> JSONResponse:
 @app.get("/api/jobs/{job_id}")
 def job_status(job_id: str, request: Request) -> JSONResponse:
     return JSONResponse(get_job_access(job_id, require_user(request)))
+
+
+@app.post("/api/jobs/{job_id}/meta")
+def gen_job_meta(job_id: str, request: Request) -> JSONResponse:
+    job = get_job_access(job_id, require_user(request))
+    if job["status"] != "done":
+        raise HTTPException(400, "Job is not finished")
+    result = job.get("result") or {}
+    if result.get("meta"):
+        return JSONResponse(result["meta"])
+    outline = "\n".join(
+        f"{p.get('title') or ''}: " + " ".join(s["text"] for s in p["segments"])[:150]
+        for p in result.get("pages") or [])
+    if not outline and (JOBS / job_id / "full.srt").exists():
+        outline = (JOBS / job_id / "full.srt").read_text(encoding="utf-8")
+    if not outline:
+        raise HTTPException(404, "No transcript available")
+    meta = job_meta(outline[:4500])
+    if not meta:
+        raise HTTPException(502, "Meta generation failed")
+    with jobs_lock:
+        jobs[job_id]["result"] = {**(jobs[job_id].get("result") or {}), "meta": meta}
+    save_job(jobs[job_id])
+    return JSONResponse(meta)
 
 
 @app.get("/api/jobs/{job_id}/thumb/{page_index}")
