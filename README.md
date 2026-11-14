@@ -13,11 +13,16 @@ clickable to seek the video; SRT / Markdown exports are available.
 2. Audio is extracted as 16 kHz mono
 3. `faster-whisper` transcribes the speech locally (GPU/CPU auto-selected; falls
    back to CPU int8 when the GPU is full)
-4. Each page's text is sent to an OpenAI-compatible `/v1/chat/completions` endpoint
+4. (Optional, on by default) Each page's transcript lines are sent to the LLM with
+    the surrounding page context to proofread speech-recognition mistakes
+    (homophones, split/merged words, punctuation); corrected text is saved back
+    into `segments.json` so re-pagination reuses it
+5. Each page's text is sent to an OpenAI-compatible `/v1/chat/completions` endpoint
    to generate per-page topic titles and an overall course title
-5. Outputs: page-by-page transcript, page thumbnails, `full.srt`, `transcript.md`
+6. Outputs: page-by-page transcript, page thumbnails, `full.srt`, `transcript.md`
 
-Speech transcription always runs locally; the LLM API is only used for titles.
+Speech transcription always runs locally; the LLM API is used for transcript
+proofreading and titles.
 The "Repaginate" control on the result page reuses an existing transcript
 (`reuse_from` parameter) and re-runs only page detection — finishes in minutes.
 

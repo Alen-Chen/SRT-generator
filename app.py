@@ -12,7 +12,7 @@ import shutil
 import threading
 import time
 import uuid
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from pathlib import Path
 
@@ -395,6 +395,50 @@ def page_title(page: dict) -> str:
     return out[:60] if out else fallback
 
 
+def correct_page(i: int, page: dict, pages: list[dict]) -> int:
+    segs = page["segments"]
+    if not segs:
+        return 0
+    prev_txt = " ".join(s["text"] for q in pages[max(i - 2, 0):i]
+                        for s in q["segments"])[-400:]
+    next_txt = " ".join(s["text"] for q in pages[i + 1:i + 3]
+                        for s in q["segments"])[:400]
+    numbered = "\n".join(f"{n}: {s['text']}" for n, s in enumerate(segs, 1))
+    out = chat(
+        "The numbered lines below are ASR (speech-to-text) output from one "
+        "slide of a lecture. Proofread each line: correct obvious speech "
+        "recognition errors (wrong homophones, split/merged words, missing or "
+        "wrong punctuation) so the text is fluent and consistent with the "
+        "surrounding context. Keep the original language; do not translate, "
+        "summarize or rephrase; do not change the meaning; keep exactly one "
+        "output line per input line, with the same number prefix. "
+        "Output ONLY the numbered corrected lines.\n\n"
+        f"Context BEFORE (for reference only):\n{prev_txt or '(none)'}\n\n"
+        f"Lines to correct:\n{numbered}\n\n"
+        f"Context AFTER (for reference only):\n{next_txt or '(none)'}",
+        max_tokens=max(256, min(2048, int(len(numbered) * 2.2))),
+        temperature=0.1)
+    if not out:
+        return 0
+    fixed: dict[int, str] = {}
+    for line in out.splitlines():
+        line = line.strip().lstrip("*")
+        m = re.match(r"^(\d{1,4})\s*[:：.、]\s*(.*)$", line)
+        if m and 1 <= int(m.group(1)) <= len(segs):
+            fixed.setdefault(int(m.group(1)), m.group(2).strip())
+    if len(fixed) != len(segs):
+        log.warning("Proofread page %s: got %d/%d lines, keeping original",
+                    page["index"], len(fixed), len(segs))
+        return 0
+    changed = 0
+    for n, s in enumerate(segs, 1):
+        new = fixed[n]
+        if new and new != s["text"]:
+            s["text"] = new
+            changed += 1
+    return changed
+
+
 def video_title(pages: list[dict], filename: str) -> str:
     joined = "; ".join(p.get("title", "") for p in pages)[:2000]
     if not joined.strip():
@@ -449,7 +493,8 @@ def run_job(job_id: str) -> None:
             set_progress(job_id, "Merging videos", 0.04)
 
         def prog(step: str, pct: float) -> None:
-            set_progress(job_id, step, 0.05 + 0.93 * pct if merged else pct)
+            set_progress(job_id, step,
+                         0.05 + 0.83 * pct if merged else 0.88 * pct)
 
         result = process(video, outdir,
                          model_size=job["params"]["model"],
@@ -459,6 +504,24 @@ def run_job(job_id: str) -> None:
                          progress=prog)
         result["merged"] = merged
         pages = result["pages"]
+
+        if job["params"].get("correct", 1):
+            changed = 0
+            done_ct = 0
+            with ThreadPoolExecutor(max_workers=4) as pool:
+                futs = [pool.submit(correct_page, i, p, pages)
+                        for i, p in enumerate(pages)]
+                for fut in as_completed(futs):
+                    changed += fut.result()
+                    done_ct += 1
+                    set_progress(job_id, "Proofreading transcript",
+                                 0.85 + 0.07 * done_ct / max(len(pages), 1))
+            (outdir / "segments.json").write_text(
+                json.dumps({"language": result["language"],
+                            "segments": result["segments"]},
+                           ensure_ascii=False, indent=1), encoding="utf-8")
+            log.info("Job %s proofread: %d/%d lines changed", job_id,
+                     changed, len(result["segments"]))
 
         set_progress(job_id, "Generating page titles", 0.955)
         with ThreadPoolExecutor(max_workers=4) as pool:
@@ -490,7 +553,8 @@ async def create_job(request: Request,
                      model: str = Form(DEFAULT_WHISPER),
                      language: str = Form("auto"),
                      scene_threshold: float = Form(0.03),
-                     reuse_from: str | None = Form(None)) -> JSONResponse:
+                     reuse_from: str | None = Form(None),
+                     correct: int = Form(1)) -> JSONResponse:
     user = require_user(request)
     if not 0.005 <= scene_threshold <= 0.5:
         raise HTTPException(400, "scene_threshold must be between 0.005 and 0.5")
@@ -549,6 +613,7 @@ async def create_job(request: Request,
                    "scene_threshold": scene_threshold,
                    "reuse_segments": reuse_segments,
                    "reuse_from": reuse_from,
+                   "correct": bool(correct),
                    "parts": parts},
         "result": None,
     }

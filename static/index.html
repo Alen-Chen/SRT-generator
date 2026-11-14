@@ -176,6 +176,8 @@ border-radius:8px;background:var(--acc2);color:var(--acc);cursor:pointer}
       <label><span data-i18n="sens"></span>
         <input type="range" id="scene" min="0.01" max="0.2" step="0.005" value="0.03">
         <span id="sceneVal">0.030</span></label>
+      <label><input type="checkbox" id="correct" checked>
+        <span data-i18n="correctOpt"></span></label>
     </div>
     <button class="primary" id="submit" disabled data-i18n="start"></button>
     <p class="muted" id="upErr"></p>
@@ -235,6 +237,7 @@ opt_large: "large-v3 (most accurate, slowest)",
 speech: "Speech language",
 opt_auto: "Auto-detect", opt_zh: "Chinese", opt_en: "English", opt_ja: "Japanese", opt_ko: "Korean",
 sens: "Page sensitivity",
+correctOpt: "AI-proofread transcript (LLM)",
 start: "Start processing", preparing: "Preparing…",
 repag: "Repaginate", repagTip: "Reuse the transcript and re-split pages with a new sensitivity",
 apply: "Apply", dlSrt: "Download SRT", dlMd: "Download Markdown", dlVideo: "Download merged video", back: "Back to upload",
@@ -248,6 +251,7 @@ step_preparing: "Preparing", step_reading: "Reading video info",
 step_detect: "Detecting slide changes", step_audio: "Extracting audio",
 step_transcribe: "Transcribing speech", step_split: "Splitting pages",
 step_thumbs: "Generating page thumbnails", step_reuse: "Reusing existing transcript",
+step_proofread: "AI-proofreading transcript",
 step_pageTitles: "Generating page titles", step_videoTitle: "Generating course title",
 authTitle: "Sign in to continue", username: "Username", password: "Password",
 signIn: "Sign in", signUp: "Register", signOut: "Sign out",
@@ -272,6 +276,7 @@ opt_large: "large-v3（最準、較慢）",
 speech: "語音語言",
 opt_auto: "自動偵測", opt_zh: "中文", opt_en: "英文", opt_ja: "日文", opt_ko: "韓文",
 sens: "分頁敏感度",
+correctOpt: "以 AI 校正轉錄文字（LLM）",
 start: "開始處理", preparing: "準備中…",
 repag: "重新分頁", repagTip: "沿用轉錄結果，依新敏感度重新切頁",
 apply: "套用", dlSrt: "下載 SRT", dlMd: "下載 Markdown", dlVideo: "下載合併影片", back: "回到上傳",
@@ -285,6 +290,7 @@ step_preparing: "準備中", step_reading: "讀取影片資訊",
 step_detect: "偵測頁面切換", step_audio: "擷取音軌",
 step_transcribe: "語音轉錄", step_split: "切分頁面",
 step_thumbs: "產生頁面縮圖", step_reuse: "沿用既有轉錄",
+step_proofread: "AI 校正轉錄文字",
 step_pageTitles: "生成頁面標題", step_videoTitle: "生成課程標題",
 authTitle: "登入以繼續", username: "帳號", password: "密碼",
 signIn: "登入", signUp: "註冊", signOut: "登出",
@@ -309,6 +315,7 @@ opt_large: "large-v3（最准、较慢）",
 speech: "语音语言",
 opt_auto: "自动检测", opt_zh: "中文", opt_en: "英文", opt_ja: "日文", opt_ko: "韩文",
 sens: "分页敏感度",
+correctOpt: "用 AI 校正转录文字（LLM）",
 start: "开始处理", preparing: "准备中…",
 repag: "重新分页", repagTip: "沿用转录结果，按新敏感度重新切页",
 apply: "应用", dlSrt: "下载 SRT", dlMd: "下载 Markdown", dlVideo: "下载合并视频", back: "返回上传",
@@ -322,11 +329,12 @@ step_preparing: "准备中", step_reading: "读取视频信息",
 step_detect: "检测页面切换", step_audio: "提取音频",
 step_transcribe: "语音转录", step_split: "切分页面",
 step_thumbs: "生成页面缩图", step_reuse: "复用已有转录",
+step_proofread: "AI 校正转录文字",
 step_pageTitles: "生成页面标题", step_videoTitle: "生成课程标题",
 authTitle: "登录以继续", username: "账号", password: "密码",
 signIn: "登录", signUp: "注册", signOut: "退出",
 firstNote: "第一个注册的账号自动成为管理员；之后注册的账号需经管理员批准后才能登录。",
-registeredNote: "注册完成，需等待管理员批准后才能在登录。",
+registeredNote: "注册完成，需等待管理员批准后才能登录。",
 authFail: "登录失败：", sessionExpired: "会话已过期，请重新登录。",
 users: "用户", uName: "用户", uStatus: "状态", uRole: "权限", uCreated: "创建时间",
 uLast: "上次登录", u_active: "启用", u_pending: "待批准", u_disabled: "已停用",
@@ -346,6 +354,7 @@ opt_large: "large-v3（最精度・低速）",
 speech: "音声言語",
 opt_auto: "自動判別", opt_zh: "中国語", opt_en: "英語", opt_ja: "日本語", opt_ko: "韓国語",
 sens: "ページ分割感度",
+correctOpt: "AI で文字起こしを校正（LLM）",
 start: "処理を開始", preparing: "準備中…",
 repag: "再ページ区切り", repagTip: "既存の文字起こしを再利用し、新しい感度でページを再分割します",
 apply: "適用", dlSrt: "SRT をダウンロード", dlMd: "Markdown をダウンロード", dlVideo: "結合後の動画をダウンロード", back: "アップロードに戻る",
@@ -359,6 +368,7 @@ step_preparing: "準備中", step_reading: "動画情報の読み取り",
 step_detect: "スライド変化の検出", step_audio: "音声の抽出",
 step_transcribe: "音声の文字起こし", step_split: "ページ分割",
 step_thumbs: "ページサムネイル生成", step_reuse: "既存の文字起こしを再利用",
+step_proofread: "AI で文字起こし校正",
 step_pageTitles: "ページタイトル生成", step_videoTitle: "コースタイトル生成",
 authTitle: "ログインしてください", username: "ユーザー名", password: "パスワード",
 signIn: "ログイン", signUp: "登録", signOut: "ログアウト",
@@ -378,7 +388,8 @@ const STEPS = {
 "Reading video info": "step_reading", "Detecting slide changes": "step_detect",
 "Extracting audio": "step_audio", "Transcribing speech": "step_transcribe",
 "Splitting pages": "step_split", "Generating page thumbnails": "step_thumbs",
-"Reusing existing transcript": "step_reuse", "Generating page titles": "step_pageTitles",
+"Reusing existing transcript": "step_reuse", "Proofreading transcript": "step_proofread",
+"Generating page titles": "step_pageTitles",
 "Generating course title": "step_videoTitle", "Done": "st_done"
 };
 
@@ -551,6 +562,7 @@ $("repag").addEventListener("click", async () => {
   const fd = new FormData();
   fd.append("reuse_from", curId);
   fd.append("scene_threshold", $("rescene").value);
+  fd.append("correct", (lastJob && lastJob.params && lastJob.params.correct === false) ? "0" : "1");
   try {
     const r = await api("/api/jobs", { method: "POST", body: fd });
     if (!r.ok) throw new Error((await r.json()).detail || r.status);
@@ -571,6 +583,7 @@ $("submit").addEventListener("click", async () => {
   fd.append("model", $("model").value);
   fd.append("language", $("lang").value);
   fd.append("scene_threshold", $("scene").value);
+  fd.append("correct", $("correct").checked ? "1" : "0");
   try {
     const r = await api("/api/jobs", { method: "POST", body: fd });
     if (!r.ok) throw new Error((await r.json()).detail || r.status);
