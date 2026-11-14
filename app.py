@@ -1,19 +1,23 @@
 """Course video page-by-page transcript - FastAPI backend."""
 from __future__ import annotations
 
+import hashlib
+import hmac
 import json
 import logging
 import os
 import re
+import secrets
 import shutil
 import threading
+import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from pathlib import Path
 
 import httpx
-from fastapi import FastAPI, Form, HTTPException, Request, UploadFile, File
+from fastapi import Body, FastAPI, Form, HTTPException, Request, UploadFile, File
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -63,6 +67,236 @@ app = FastAPI(title="Course Video Page Transcript")
 worker = ThreadPoolExecutor(max_workers=1)
 jobs: dict[str, dict] = {}
 jobs_lock = threading.Lock()
+
+# ---------------------------------------------------------------- auth ------
+USERS_FILE = DATA / "users.json"
+SESSIONS_FILE = DATA / "sessions.json"
+SESSION_COOKIE = "sg_session"
+SESSION_TTL = 7 * 86400
+PBKDF2_ITER = 200_000
+
+users: dict[str, dict] = {}
+sessions: dict[str, dict] = {}
+auth_lock = threading.Lock()
+
+
+def _load_map(path: Path) -> dict:
+    if path.exists():
+        try:
+            return json.loads(path.read_text(encoding="utf-8"))
+        except Exception:  # noqa: BLE001
+            log.exception("Failed to load %s", path)
+    return {}
+
+
+def save_users() -> None:
+    USERS_FILE.write_text(json.dumps(users, ensure_ascii=False, indent=1),
+                          encoding="utf-8")
+
+
+def save_sessions() -> None:
+    SESSIONS_FILE.write_text(json.dumps(sessions, ensure_ascii=False),
+                             encoding="utf-8")
+
+
+with auth_lock:
+    users = _load_map(USERS_FILE)
+    sessions = {k: v for k, v in _load_map(SESSIONS_FILE).items()
+                if v.get("exp", 0) > time.time()}
+    save_sessions()
+
+
+def hash_password(pw: str, salt: str | None = None) -> str:
+    salt = salt or secrets.token_hex(16)
+    dk = hashlib.pbkdf2_hmac("sha256", pw.encode("utf-8"),
+                             bytes.fromhex(salt), PBKDF2_ITER)
+    return f"{salt}${dk.hex()}"
+
+
+def verify_password(pw: str, stored: str) -> bool:
+    try:
+        salt, want = stored.split("$", 1)
+    except ValueError:
+        return False
+    dk = hashlib.pbkdf2_hmac("sha256", pw.encode("utf-8"),
+                             bytes.fromhex(salt), PBKDF2_ITER)
+    return hmac.compare_digest(dk.hex(), want)
+
+
+def find_user(username: str) -> dict | None:
+    for u in users.values():
+        if u["username"] == username:
+            return u
+    return None
+
+
+def create_user(username: str, pw_hash: str) -> dict:
+    with auth_lock:
+        first = not users
+        role = "admin" if first else "user"
+        status = "active" if first else "pending"
+        uid = uuid.uuid4().hex[:12]
+        u = {"id": uid, "username": username, "name": username,
+             "pw": pw_hash, "role": role, "status": status,
+             "created_at": datetime.now().isoformat(timespec="seconds"),
+             "last_login": None}
+        users[uid] = u
+        save_users()
+    log.info("Registered user %s (role=%s, status=%s)", username, role, status)
+    return u
+
+
+def login_session(resp, user: dict) -> None:
+    token = secrets.token_urlsafe(32)
+    with auth_lock:
+        sessions[token] = {"uid": user["id"], "exp": time.time() + SESSION_TTL}
+        user["last_login"] = datetime.now().isoformat(timespec="seconds")
+        save_sessions()
+        save_users()
+    resp.set_cookie(SESSION_COOKIE, token, httponly=True, samesite="lax",
+                    max_age=SESSION_TTL)
+
+
+def current_user(request: Request) -> dict | None:
+    token = request.cookies.get(SESSION_COOKIE)
+    if not token:
+        return None
+    with auth_lock:
+        s = sessions.get(token)
+        if not s or s.get("exp", 0) < time.time():
+            sessions.pop(token, None)
+            save_sessions()
+            return None
+        return users.get(s["uid"])
+
+
+def require_user(request: Request) -> dict:
+    u = current_user(request)
+    if not u:
+        raise HTTPException(401, "Not signed in")
+    return u
+
+
+def public_user(u: dict) -> dict:
+    return {"id": u["id"], "username": u["username"],
+            "name": u.get("name") or u["username"], "role": u["role"],
+            "status": u.get("status", "active")}
+
+
+@app.post("/api/auth/register")
+def auth_register(payload: dict = Body(...)) -> JSONResponse:
+    username = str(payload.get("username", "")).strip().lower()
+    password = str(payload.get("password", ""))
+    if not re.fullmatch(r"[a-z0-9][a-z0-9._\-]{1,39}", username):
+        raise HTTPException(400, "Username must be 2-40 chars: letters, digits, . _ -")
+    if len(password) < 6:
+        raise HTTPException(400, "Password must be at least 6 characters")
+    if find_user(username):
+        raise HTTPException(409, "Username already taken")
+    u = create_user(username, hash_password(password))
+    pending = u.get("status") != "active"
+    resp = JSONResponse({"user": public_user(u), "pending": pending})
+    if not pending:
+        login_session(resp, u)
+    return resp
+
+
+@app.post("/api/auth/login")
+def auth_login(payload: dict = Body(...)) -> JSONResponse:
+    username = str(payload.get("username", "")).strip().lower()
+    password = str(payload.get("password", ""))
+    u = find_user(username)
+    if not u or not verify_password(password, u["pw"]):
+        raise HTTPException(401, "Invalid username or password")
+    st = u.get("status", "active")
+    if st == "pending":
+        raise HTTPException(403, "Account is awaiting administrator approval")
+    if st == "disabled":
+        raise HTTPException(403, "Account has been disabled")
+    resp = JSONResponse({"user": public_user(u)})
+    login_session(resp, u)
+    return resp
+
+
+@app.post("/api/auth/logout")
+def auth_logout(request: Request) -> JSONResponse:
+    token = request.cookies.get(SESSION_COOKIE)
+    if token:
+        with auth_lock:
+            sessions.pop(token, None)
+            save_sessions()
+    resp = JSONResponse({"ok": True})
+    resp.delete_cookie(SESSION_COOKIE)
+    return resp
+
+
+@app.get("/api/auth/me")
+def auth_me(request: Request) -> JSONResponse:
+    u = current_user(request)
+    if not u:
+        raise HTTPException(401, "Not signed in")
+    return JSONResponse(public_user(u))
+
+
+@app.get("/api/admin/users")
+def admin_users(request: Request) -> JSONResponse:
+    u = require_user(request)
+    if u["role"] != "admin":
+        raise HTTPException(403, "Admin only")
+    return JSONResponse([{
+        "id": x["id"], "username": x["username"], "role": x["role"],
+        "status": x.get("status", "active"),
+        "created_at": x.get("created_at"), "last_login": x.get("last_login"),
+    } for x in sorted(users.values(), key=lambda x: x.get("created_at") or "")])
+
+
+@app.post("/api/admin/users/{user_id}/status")
+def admin_set_status(request: Request, user_id: str,
+                     payload: dict = Body(...)) -> JSONResponse:
+    actor = require_user(request)
+    if actor["role"] != "admin":
+        raise HTTPException(403, "Admin only")
+    status = str(payload.get("status", ""))
+    if status not in ("active", "disabled", "pending"):
+        raise HTTPException(400, "Status must be active, disabled or pending")
+    if user_id == actor["id"] and status != "active":
+        raise HTTPException(400, "You cannot deactivate your own account")
+    target = users.get(user_id)
+    if not target:
+        raise HTTPException(404, "User not found")
+    with auth_lock:
+        target["status"] = status
+        if status != "active":
+            for tok, s in list(sessions.items()):
+                if s["uid"] == user_id:
+                    del sessions[tok]
+        save_users()
+        save_sessions()
+    log.info("Admin %s set status of %s to %s",
+             actor["username"], target["username"], status)
+    return JSONResponse({"ok": True})
+
+
+@app.post("/api/admin/users/{user_id}/role")
+def admin_set_role(request: Request, user_id: str,
+                   payload: dict = Body(...)) -> JSONResponse:
+    actor = require_user(request)
+    if actor["role"] != "admin":
+        raise HTTPException(403, "Admin only")
+    role = str(payload.get("role", ""))
+    if role not in ("admin", "user"):
+        raise HTTPException(400, "Role must be admin or user")
+    if user_id == actor["id"]:
+        raise HTTPException(400, "You cannot change your own role")
+    target = users.get(user_id)
+    if not target:
+        raise HTTPException(404, "User not found")
+    with auth_lock:
+        target["role"] = role
+        save_users()
+    log.info("Admin %s changed role of %s to %s",
+             actor["username"], target["username"], role)
+    return JSONResponse({"ok": True})
 
 
 def load_persisted() -> None:
@@ -251,11 +485,13 @@ def run_job(job_id: str) -> None:
 
 
 @app.post("/api/jobs")
-async def create_job(files: list[UploadFile] = File(default=[]),
+async def create_job(request: Request,
+                     files: list[UploadFile] = File(default=[]),
                      model: str = Form(DEFAULT_WHISPER),
                      language: str = Form("auto"),
                      scene_threshold: float = Form(0.03),
                      reuse_from: str | None = Form(None)) -> JSONResponse:
+    user = require_user(request)
     if not 0.005 <= scene_threshold <= 0.5:
         raise HTTPException(400, "scene_threshold must be between 0.005 and 0.5")
     if model not in {"tiny", "base", "small", "medium", "large-v3", "large-v3-turbo"}:
@@ -271,7 +507,7 @@ async def create_job(files: list[UploadFile] = File(default=[]),
     filename = None
     merged_from = False
     if reuse_from and not files:
-        src = get_job_or_404(reuse_from)
+        src = get_job_access(reuse_from, user)
         seg_src = JOBS / reuse_from / "segments.json"
         if not seg_src.exists():
             raise HTTPException(400, "Source job has no reusable transcript")
@@ -300,6 +536,7 @@ async def create_job(files: list[UploadFile] = File(default=[]),
 
     job = {
         "id": job_id,
+        "owner": user["id"],
         "filename": Path(filename).name,
         "merged_from": merged_from,
         "export_stem": re.sub(r"[^\w\-]+", "_",
@@ -330,12 +567,23 @@ def get_job_or_404(job_id: str) -> dict:
     return job
 
 
+def get_job_access(job_id: str, user: dict) -> dict:
+    job = get_job_or_404(job_id)
+    if user["role"] != "admin" and job.get("owner") != user["id"]:
+        raise HTTPException(404, "Job not found")
+    return job
+
+
 @app.get("/api/jobs")
-def list_jobs() -> JSONResponse:
-    items = sorted(jobs.values(), key=lambda j: j["created_at"], reverse=True)
+def list_jobs(request: Request) -> JSONResponse:
+    user = require_user(request)
+    items = [j for j in jobs.values()
+             if user["role"] == "admin" or j.get("owner") == user["id"]]
+    items = sorted(items, key=lambda j: j["created_at"], reverse=True)
     return JSONResponse([{
         "id": j["id"], "filename": j["filename"], "status": j["status"],
         "created_at": j["created_at"],
+        "owner": (users.get(j.get("owner") or "", {}) or {}).get("username"),
         "title": (j.get("result") or {}).get("title"),
         "pages": len((j.get("result") or {}).get("pages", [])),
         "duration": (j.get("result") or {}).get("duration"),
@@ -343,13 +591,13 @@ def list_jobs() -> JSONResponse:
 
 
 @app.get("/api/jobs/{job_id}")
-def job_status(job_id: str) -> JSONResponse:
-    return JSONResponse(get_job_or_404(job_id))
+def job_status(job_id: str, request: Request) -> JSONResponse:
+    return JSONResponse(get_job_access(job_id, require_user(request)))
 
 
 @app.get("/api/jobs/{job_id}/thumb/{page_index}")
-def job_thumb(job_id: str, page_index: int) -> FileResponse:
-    job = get_job_or_404(job_id)
+def job_thumb(job_id: str, page_index: int, request: Request) -> FileResponse:
+    job = get_job_access(job_id, require_user(request))
     pages = (job.get("result") or {}).get("pages", [])
     if not 1 <= page_index <= len(pages):
         raise HTTPException(404, "Page not found")
@@ -395,7 +643,7 @@ def range_response(path: Path, request: Request, media: str):
 
 @app.get("/api/jobs/{job_id}/video")
 def job_video(job_id: str, request: Request, download: int = 0):
-    job = get_job_or_404(job_id)
+    job = get_job_access(job_id, require_user(request))
     path = Path(job["video_path"])
     if not path.exists():
         raise HTTPException(404, "Video file not found")
@@ -408,8 +656,8 @@ def job_video(job_id: str, request: Request, download: int = 0):
 
 
 @app.get("/api/jobs/{job_id}/export.{fmt}")
-def job_export(job_id: str, fmt: str) -> FileResponse:
-    job = get_job_or_404(job_id)
+def job_export(job_id: str, fmt: str, request: Request) -> FileResponse:
+    job = get_job_access(job_id, require_user(request))
     if job["status"] != "done":
         raise HTTPException(409, "Job not finished yet")
     mapping = {"srt": "full.srt", "md": "transcript.md"}

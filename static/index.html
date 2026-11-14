@@ -86,6 +86,30 @@ a.ts:hover{color:#1e40af}
 .rerip{display:flex;align-items:center;gap:6px;font-size:13px;
 border-left:1px solid var(--line);padding-left:12px}
 .rerip input[type=range]{width:110px}
+#authCard h2{font-size:18px}
+.aflds{display:flex;flex-direction:column;gap:10px;margin-bottom:14px}
+.aflds label{display:flex;flex-direction:column;gap:4px;font-size:13px;font-weight:600}
+.aflds input{font:inherit;padding:8px 10px;border:1px solid var(--line);border-radius:8px}
+.arow{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.arow button:not(.primary){font:inherit;padding:10px 18px;border:1px solid var(--line);
+border-radius:10px;background:#fff;cursor:pointer}
+#userBox{margin-left:14px;display:flex;align-items:center;gap:8px}
+#uNameLbl{font-size:13px;color:#e6edf7;font-weight:600;max-width:160px;overflow:hidden;
+text-overflow:ellipsis;white-space:nowrap}
+#userBox button{background:#1d2b40;color:#cdd9ea;border:1px solid #33415c;
+border-radius:99px;padding:4px 12px;font-size:12px;cursor:pointer}
+#userBox button:hover{background:#2a3c5c}
+#userBox .rbadge{font-size:11px;padding:2px 9px;border-radius:99px;background:#25406b;
+color:#cfe3ff;white-space:nowrap}
+.modal{position:fixed;inset:0;background:rgba(16,24,40,.45);display:flex;
+align-items:flex-start;justify-content:center;padding:40px 16px;z-index:20}
+.mcard{background:#fff;border-radius:14px;padding:20px 22px;max-width:780px;width:100%;
+max-height:80vh;overflow:auto;box-shadow:0 8px 30px rgba(16,24,40,.25)}
+#usersTable{width:100%;border-collapse:collapse;font-size:13px}
+#usersTable th,#usersTable td{border-bottom:1px solid var(--line);padding:6px 8px;
+text-align:left;vertical-align:middle}
+#usersTable td button{font-size:12px;padding:4px 10px;border:1px solid var(--acc);
+border-radius:8px;background:var(--acc2);color:var(--acc);cursor:pointer}
 </style>
 </head>
 <body>
@@ -99,9 +123,31 @@ border-left:1px solid var(--line);padding-left:12px}
     <option value="ja">日本語</option>
   </select>
   <nav id="history"></nav>
+  <div id="userBox" class="hidden">
+    <span id="uNameLbl"></span>
+    <span class="rbadge" id="uRoleLbl"></span>
+    <button id="btnUsers" class="hidden" data-i18n="users"></button>
+    <button id="btnLogout" data-i18n="signOut"></button>
+  </div>
 </header>
 <main>
-  <section id="uploadCard" class="card">
+  <section id="authCard" class="card hidden" style="max-width:440px;margin:34px auto">
+    <h2 style="margin:0 0 14px" data-i18n="authTitle"></h2>
+    <div class="aflds">
+      <label><span data-i18n="username"></span>
+        <input id="auUser" autocomplete="username" maxlength="40"></label>
+      <label><span data-i18n="password"></span>
+        <input id="auPass" type="password" autocomplete="current-password"></label>
+    </div>
+    <div class="arow">
+      <button class="primary" id="btnLogin" data-i18n="signIn"></button>
+      <button id="btnRegister" data-i18n="signUp"></button>
+    </div>
+    <p class="err" id="authErr"></p>
+    <p class="muted" id="authMsg"></p>
+    <p class="muted" id="firstNote" data-i18n="firstNote"></p>
+  </section>
+  <section id="uploadCard" class="card hidden">
     <div class="drop" id="drop">
       <p data-i18n-html="drop"></p>
       <p class="muted" id="fileInfo" data-i18n="fileInfo"></p>
@@ -163,9 +209,18 @@ border-left:1px solid var(--line);padding-left:12px}
     </div>
   </section>
 </main>
+<div id="usersModal" class="modal hidden"><div class="mcard">
+  <h3 style="margin-top:0" data-i18n="users"></h3>
+  <table id="usersTable"><thead><tr>
+    <th data-i18n="uName"></th><th data-i18n="uStatus"></th><th data-i18n="uRole"></th>
+    <th data-i18n="uCreated"></th><th data-i18n="uLast"></th><th></th>
+  </tr></thead><tbody id="usersBody"></tbody></table>
+  <p class="err" id="usersErr"></p>
+  <div class="arow"><button id="usersClose" data-i18n="close"></button></div>
+</div></div>
 <script>
 const $ = (id) => document.getElementById(id);
-let pickedFiles = [], pollTimer = null, curId = null, lastJob = null;
+let pickedFiles = [], pollTimer = null, curId = null, lastJob = null, ME = null;
 
 const I18N = {
 en: {
@@ -193,7 +248,17 @@ step_preparing: "Preparing", step_reading: "Reading video info",
 step_detect: "Detecting slide changes", step_audio: "Extracting audio",
 step_transcribe: "Transcribing speech", step_split: "Splitting pages",
 step_thumbs: "Generating page thumbnails", step_reuse: "Reusing existing transcript",
-step_pageTitles: "Generating page titles", step_videoTitle: "Generating course title"
+step_pageTitles: "Generating page titles", step_videoTitle: "Generating course title",
+authTitle: "Sign in to continue", username: "Username", password: "Password",
+signIn: "Sign in", signUp: "Register", signOut: "Sign out",
+firstNote: "The first registered account becomes the administrator; later registrations must be approved by an administrator before signing in.",
+registeredNote: "Registration complete. An administrator must approve your account before you can sign in.",
+authFail: "Sign-in failed: ", sessionExpired: "Session expired. Please sign in again.",
+users: "Users", uName: "User", uStatus: "Status", uRole: "Role", uCreated: "Created",
+uLast: "Last login", u_active: "Active", u_pending: "Pending approval", u_disabled: "Disabled",
+enable: "Approve / Enable", disable: "Disable",
+role_admin: "Administrator", role_user: "User",
+promote: "Promote to admin", demote: "Demote to user", close: "Close"
 },
 "zh-TW": {
 pageTitle: "課程影片．逐頁文字稿",
@@ -220,7 +285,17 @@ step_preparing: "準備中", step_reading: "讀取影片資訊",
 step_detect: "偵測頁面切換", step_audio: "擷取音軌",
 step_transcribe: "語音轉錄", step_split: "切分頁面",
 step_thumbs: "產生頁面縮圖", step_reuse: "沿用既有轉錄",
-step_pageTitles: "生成頁面標題", step_videoTitle: "生成課程標題"
+step_pageTitles: "生成頁面標題", step_videoTitle: "生成課程標題",
+authTitle: "登入以繼續", username: "帳號", password: "密碼",
+signIn: "登入", signUp: "註冊", signOut: "登出",
+firstNote: "第一個註冊的帳號自動成為管理員；之後註冊的帳號需經管理員核准後才能登入。",
+registeredNote: "註冊完成，需等待管理員核准後才能登入。",
+authFail: "登入失敗：", sessionExpired: "工作階段已過期，請重新登入。",
+users: "使用者", uName: "使用者", uStatus: "狀態", uRole: "權限", uCreated: "建立時間",
+uLast: "上次登入", u_active: "啟用", u_pending: "待核准", u_disabled: "已停用",
+enable: "核准／啟用", disable: "停用",
+role_admin: "管理員", role_user: "一般用戶",
+promote: "提升為管理員", demote: "降為一般用戶", close: "關閉"
 },
 "zh-CN": {
 pageTitle: "课程视频 · 逐页文稿",
@@ -247,7 +322,17 @@ step_preparing: "准备中", step_reading: "读取视频信息",
 step_detect: "检测页面切换", step_audio: "提取音频",
 step_transcribe: "语音转录", step_split: "切分页面",
 step_thumbs: "生成页面缩图", step_reuse: "复用已有转录",
-step_pageTitles: "生成页面标题", step_videoTitle: "生成课程标题"
+step_pageTitles: "生成页面标题", step_videoTitle: "生成课程标题",
+authTitle: "登录以继续", username: "账号", password: "密码",
+signIn: "登录", signUp: "注册", signOut: "退出",
+firstNote: "第一个注册的账号自动成为管理员；之后注册的账号需经管理员批准后才能登录。",
+registeredNote: "注册完成，需等待管理员批准后才能在登录。",
+authFail: "登录失败：", sessionExpired: "会话已过期，请重新登录。",
+users: "用户", uName: "用户", uStatus: "状态", uRole: "权限", uCreated: "创建时间",
+uLast: "上次登录", u_active: "启用", u_pending: "待批准", u_disabled: "已停用",
+enable: "批准／启用", disable: "停用",
+role_admin: "管理员", role_user: "普通用户",
+promote: "提升为管理员", demote: "降为普通用户", close: "关闭"
 },
 ja: {
 pageTitle: "講義動画 · ページ別文字起こし",
@@ -274,7 +359,17 @@ step_preparing: "準備中", step_reading: "動画情報の読み取り",
 step_detect: "スライド変化の検出", step_audio: "音声の抽出",
 step_transcribe: "音声の文字起こし", step_split: "ページ分割",
 step_thumbs: "ページサムネイル生成", step_reuse: "既存の文字起こしを再利用",
-step_pageTitles: "ページタイトル生成", step_videoTitle: "コースタイトル生成"
+step_pageTitles: "ページタイトル生成", step_videoTitle: "コースタイトル生成",
+authTitle: "ログインしてください", username: "ユーザー名", password: "パスワード",
+signIn: "ログイン", signUp: "登録", signOut: "ログアウト",
+firstNote: "最初に登録したアカウントが管理者になります。以降の登録は管理者の承認後にログインできます。",
+registeredNote: "登録が完了しました。管理者の承認後にログインできます。",
+authFail: "ログイン失敗：", sessionExpired: "セッションが期限切れです。再度ログインしてください。",
+users: "ユーザー", uName: "ユーザー", uStatus: "状態", uRole: "権限", uCreated: "作成日",
+uLast: "最終ログイン", u_active: "有効", u_pending: "承認待ち", u_disabled: "停止済み",
+enable: "承認／有効化", disable: "停止",
+role_admin: "管理者", role_user: "一般ユーザー",
+promote: "管理者に昇格", demote: "一般に戻す", close: "閉じる"
 }
 };
 
@@ -318,6 +413,7 @@ function applyLang() {
     el.title = t(el.dataset.tip);
   });
   $("uiLang").value = saved;
+  if (ME) renderUserBox();
   if (!$("fileList").classList.contains("hidden")) renderFileList();
   else $("fileInfo").textContent = t("fileInfo");
   if (!$("result").classList.contains("hidden") && lastJob) showResult(lastJob);
@@ -456,7 +552,7 @@ $("repag").addEventListener("click", async () => {
   fd.append("reuse_from", curId);
   fd.append("scene_threshold", $("rescene").value);
   try {
-    const r = await fetch("/api/jobs", { method: "POST", body: fd });
+    const r = await api("/api/jobs", { method: "POST", body: fd });
     if (!r.ok) throw new Error((await r.json()).detail || r.status);
     poll((await r.json()).id);
   } catch (e) {
@@ -476,7 +572,7 @@ $("submit").addEventListener("click", async () => {
   fd.append("language", $("lang").value);
   fd.append("scene_threshold", $("scene").value);
   try {
-    const r = await fetch("/api/jobs", { method: "POST", body: fd });
+    const r = await api("/api/jobs", { method: "POST", body: fd });
     if (!r.ok) throw new Error((await r.json()).detail || r.status);
     poll((await r.json()).id);
   } catch (e) {
@@ -510,9 +606,13 @@ function poll(id) {
   const tick = async () => {
     let j;
     try {
-      const r = await fetch("/api/jobs/" + id);
+      const r = await api("/api/jobs/" + id);
       j = await r.json();
-    } catch (e) { pollTimer = setTimeout(tick, 1500); return; }
+    } catch (e) {
+      if (ME === null) return;
+      pollTimer = setTimeout(tick, 1500);
+      return;
+    }
     lastJob = j;
     renderProg(j);
     if (j.status === "done") { showResult(j); loadHistory(); }
@@ -581,13 +681,14 @@ $("back").addEventListener("click", () => {
 
 async function loadHistory() {
   try {
-    const items = await (await fetch("/api/jobs")).json();
+    const items = await (await api("/api/jobs")).json();
     const nav = $("history");
     nav.innerHTML = "";
     for (const it of items.slice(0, 8)) {
       const b = document.createElement("button");
       b.textContent = it.title || it.filename;
-      b.title = `${it.filename} (${statusLabel(it.status)})`;
+      const own = ME && ME.role === "admin" && it.owner ? " · " + it.owner : "";
+      b.title = `${it.filename} (${statusLabel(it.status)})${own}`;
       b.addEventListener("click", () => pollOpen(it.id));
       nav.appendChild(b);
     }
@@ -596,13 +697,147 @@ async function loadHistory() {
 
 function pollOpen(id) {
   clearTimeout(pollTimer);
-  fetch("/api/jobs/" + id).then((r) => r.json()).then((j) => {
+  api("/api/jobs/" + id).then((r) => r.json()).then((j) => {
     if (j.status === "done") showResult(j); else poll(id);
-  });
+  }).catch(() => { /* auth expired */ });
 }
 
+async function api(path, opts) {
+  const r = await fetch(path, opts);
+  if (r.status === 401) {
+    showAuth();
+    throw new Error(t("sessionExpired"));
+  }
+  return r;
+}
+
+function showAuth() {
+  ME = null;
+  clearTimeout(pollTimer);
+  $("userBox").classList.add("hidden");
+  $("usersModal").classList.add("hidden");
+  for (const id of ["uploadCard", "progressCard", "result"]) $(id).classList.add("hidden");
+  $("authErr").textContent = "";
+  $("authMsg").textContent = "";
+  $("authCard").classList.remove("hidden");
+}
+
+function renderUserBox() {
+  if (!ME) return;
+  $("uNameLbl").textContent = ME.name || ME.username;
+  $("uRoleLbl").textContent = ME.role === "admin" ? t("role_admin") : t("role_user");
+  $("btnUsers").classList.toggle("hidden", ME.role !== "admin");
+  $("userBox").classList.remove("hidden");
+}
+
+async function doAuth(url) {
+  const username = $("auUser").value.trim();
+  const password = $("auPass").value;
+  $("btnLogin").disabled = $("btnRegister").disabled = true;
+  $("authErr").textContent = "";
+  try {
+    const r = await fetch(url, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username, password }),
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.detail || r.status);
+    $("auPass").value = "";
+    if (d.pending) {
+      $("authMsg").textContent = t("registeredNote");
+      return;
+    }
+    ME = d.user;
+    $("authMsg").textContent = "";
+    renderUserBox();
+    $("authCard").classList.add("hidden");
+    $("uploadCard").classList.remove("hidden");
+    loadHistory();
+  } catch (e) {
+    $("authErr").textContent = t("authFail") + e.message;
+  } finally {
+    $("btnLogin").disabled = $("btnRegister").disabled = false;
+  }
+}
+
+$("btnLogin").addEventListener("click", () => doAuth("/api/auth/login"));
+$("btnRegister").addEventListener("click", () => doAuth("/api/auth/register"));
+for (const el of [$("auUser"), $("auPass")]) {
+  el.addEventListener("keydown", (e) => { if (e.key === "Enter") doAuth("/api/auth/login"); });
+}
+$("btnLogout").addEventListener("click", async () => {
+  try { await fetch("/api/auth/logout", { method: "POST" }); } catch (e) { /* ignore */ }
+  $("player").pause();
+  $("player").src = "";
+  pickedFiles = [];
+  renderFileList();
+  showAuth();
+});
+
+async function openUsers() {
+  $("usersErr").textContent = "";
+  try {
+    const r = await api("/api/admin/users");
+    if (!r.ok) throw new Error((await r.json()).detail || r.status);
+    const list = await r.json();
+    const tb = $("usersBody");
+    tb.innerHTML = "";
+    for (const u of list) {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `<td>${esc(u.username)}</td>` +
+        `<td>${esc(t("u_" + (u.status || "active")))}</td>` +
+        `<td>${esc(u.role === "admin" ? t("role_admin") : t("role_user"))}</td>` +
+        `<td>${esc(u.created_at || "-")}</td><td>${esc(u.last_login || "-")}</td><td></td>`;
+      const act = (path, body, label) => {
+        const b = document.createElement("button");
+        b.textContent = label;
+        b.addEventListener("click", async () => {
+          try {
+            const rr = await api(`/api/admin/users/${u.id}/${path}`, {
+              method: "POST", headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(body),
+            });
+            if (!rr.ok) throw new Error((await rr.json()).detail || rr.status);
+            openUsers();
+          } catch (e2) {
+            $("usersErr").textContent = e2.message;
+          }
+        });
+        tr.lastElementChild.appendChild(b);
+      };
+      if (ME && u.id !== ME.id) {
+        if (u.status !== "active") act("status", { status: "active" }, t("enable"));
+        else act("status", { status: "disabled" }, t("disable"));
+        if (u.status === "active") {
+          act("role", { role: u.role === "admin" ? "user" : "admin" },
+            u.role === "admin" ? t("demote") : t("promote"));
+        }
+      }
+      tb.appendChild(tr);
+    }
+    $("usersModal").classList.remove("hidden");
+  } catch (e) {
+    $("usersErr").textContent = e.message;
+    $("usersModal").classList.remove("hidden");
+  }
+}
+$("btnUsers").addEventListener("click", openUsers);
+$("usersClose").addEventListener("click", () => $("usersModal").classList.add("hidden"));
+
 applyLang();
-loadHistory();
+(async function boot() {
+  try {
+    const r = await fetch("/api/auth/me");
+    if (r.ok) ME = await r.json();
+  } catch (e) { /* ignore */ }
+  if (ME) {
+    renderUserBox();
+    $("uploadCard").classList.remove("hidden");
+    loadHistory();
+  } else {
+    showAuth();
+  }
+})();
 </script>
 </body>
 </html>

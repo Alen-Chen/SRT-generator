@@ -69,9 +69,31 @@ Environment variables override the config file:
 | `WHISPER_DEVICE` / `WHISPER_COMPUTE` | auto / int8_float16→cpu int8 | force transcription device |
 | `SG_DATA_DIR` | `./data` | uploads and results directory |
 
+## Accounts & roles
+
+- Every page requires sign-in with a registered username/password. Sessions last
+  7 days (HttpOnly cookie); users are stored in `data/users.json`.
+- The **first registered account becomes the administrator** and is signed in
+  immediately. **Every later registration starts as `pending`** and cannot sign
+  in until an administrator approves it (Users panel → Approve / Enable).
+  Administrators can also disable accounts and promote/demote roles
+  (self-deactivation and self-demotion are blocked).
+- Each user only sees their own job history, videos and exports; administrators
+  see everything and can open any job.
+- Uploaded originals are kept per user (`data/uploads/`); when several parts
+  are merged, only the merged file is kept. Generated subtitles
+  (`full.srt`) and the Markdown transcript are stored under `data/jobs/{id}/`.
+
 ## API
 
-- `POST /api/jobs` (multipart: `file`, `model`, `language`, `scene_threshold`
+All `/api/jobs*` endpoints require a signed-in session cookie (401 otherwise).
+
+- `POST /api/auth/register` / `POST /api/auth/login` (JSON `{username,password}`),
+  `POST /api/auth/logout`, `GET /api/auth/me`
+- `GET /api/admin/users`, `POST /api/admin/users/{id}/role`,
+  `POST /api/admin/users/{id}/status` (admin only)
+- `POST /api/jobs` (multipart: `files` (repeatable), `model`, `language`,
+  `scene_threshold`
   (default 0.03); optional `reuse_from`=<job id> to reuse a transcript and only
   re-split pages)
 - `GET /api/jobs` / `GET /api/jobs/{id}` — job list and status
