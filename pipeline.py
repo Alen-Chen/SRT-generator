@@ -48,12 +48,10 @@ def extract_audio(video: Path, wav: Path) -> None:
 def probe_streams(video: Path) -> dict:
     r = _run(["-i", str(video)], timeout=120)
     out = {"video": False, "audio": False}
-    for m in re.finditer(r"Stream #\d+:\d+[^(]*\((\w+)\)", r.stderr):
-        t = m.group(1)
-        if t == "Video":
-            out["video"] = True
-        elif t == "Audio":
-            out["audio"] = True
+    for line in r.stderr.splitlines():
+        m = re.search(r"Stream #\d+:\d+.*?: (Video|Audio)", line)
+        if m:
+            out[m.group(1).lower()] = True
     return out
 
 
@@ -102,6 +100,81 @@ def merge_videos(parts: list[Path], out: Path) -> None:
     if r2.returncode != 0 or not out.exists() or out.stat().st_size == 0:
         out.unlink(missing_ok=True)
         raise RuntimeError(f"Merge failed: {(r2.stderr or r.stderr)[-800:]}")
+
+
+CUT_MIN_GAP = 6.0
+CUT_PAD = 0.4
+
+
+def compute_keep_blocks(segments: list[dict], duration: float,
+                        min_gap: float = CUT_MIN_GAP,
+                        pad: float = CUT_PAD) -> list[list[float]]:
+    """Merge transcript speech segments into keep blocks (padded by `pad`).
+    Speech separated by less than `min_gap` of silence is kept contiguously;
+    gaps of `min_gap` or more (plus leading/trailing dead air) become cuts."""
+    blocks: list[list[float]] = []
+    for s in sorted(segments, key=lambda x: x["start"]):
+        b0 = max(0.0, float(s["start"]) - pad)
+        b1 = min(duration, float(s["end"]) + pad)
+        if blocks and (b0 <= blocks[-1][1] or b0 - blocks[-1][1] < min_gap):
+            blocks[-1][1] = max(blocks[-1][1], b1)
+        else:
+            blocks.append([b0, b1])
+    return blocks
+
+
+def compute_drop_blocks(keep: list[list[float]], duration: float,
+                        min_len: float = 0.05) -> list[tuple[float, float]]:
+    drops: list[tuple[float, float]] = []
+    prev = 0.0
+    for b in keep:
+        if b[0] - prev > min_len:
+            drops.append((prev, b[0]))
+        prev = max(prev, b[1])
+    if duration - prev > min_len:
+        drops.append((prev, duration))
+    return drops
+
+
+def shift_time(t: float, drops: list[tuple[float, float]]) -> float:
+    """Map an original-timeline time onto the cut timeline. Times that fall
+    inside a removed block clamp to that block's start position."""
+    acc = 0.0
+    for ds, de in drops:
+        if de <= t:
+            acc += de - ds
+        elif t >= ds:
+            return ds - acc
+        else:
+            break
+    return t - acc
+
+
+def cut_video(video: Path, out: Path, keep: list[list[float]]) -> None:
+    """Re-encode `video` keeping only the given time ranges (precise cuts)."""
+    if not keep:
+        raise ValueError("Nothing to keep")
+    streams = probe_streams(video)
+    has_a = bool(streams["audio"])
+    parts = []
+    for i, (a, b) in enumerate(keep):
+        parts.append(f"[0:v]trim={a:.3f}:{b:.3f},setpts=PTS-STARTPTS[v{i}]")
+        if has_a:
+            parts.append(f"[0:a]atrim={a:.3f}:{b:.3f},asetpts=PTS-STARTPTS[a{i}]")
+    labels = [f"[v{i}]" + (f"[a{i}]" if has_a else "") for i in range(len(keep))]
+    parts.append("".join(labels) +
+                 f"concat=n={len(keep)}:v=1:a={1 if has_a else 0}[outv]" +
+                 ("[outa]" if has_a else ""))
+    args: list[str] = ["-i", str(video), "-filter_complex", ";".join(parts),
+                       "-map", "[outv]"]
+    if has_a:
+        args += ["-map", "[outa]", "-c:a", "aac"]
+    args += ["-c:v", "libx264", "-preset", "veryfast", "-crf", "23",
+             "-movflags", "+faststart", str(out)]
+    r = _run(args, timeout=None)
+    if r.returncode != 0 or not out.exists() or out.stat().st_size == 0:
+        out.unlink(missing_ok=True)
+        raise RuntimeError(f"Smart cut failed: {(r.stderr or '')[-800:]}")
 
 
 def _scaled_dims(video: Path) -> tuple[int, int]:

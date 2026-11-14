@@ -25,7 +25,14 @@ clickable to seek the video; SRT / Markdown exports are available.
    to generate per-page topic titles, an overall course title, and a bilingual
    (Chinese/English) title + summary shown in the right-hand history panel
    (summaries are collapsed; click to expand; older jobs backfill on first view)
-6. Outputs: page-by-page transcript, page thumbnails, `full.srt`, `transcript.md`
+6. (Optional, off by default) Smart silence-cut: using the transcript as the
+   basis, stretches with no speech for 6 s or more (pre-start preparation,
+   dead air between merged parts) are cut out of the video with a precise
+   re-encode; segment/page timestamps and page thumbnails are shifted to the
+   new timeline, and the result (`{id}_clip.mp4`) becomes the playable/
+   downloadable video. Removed blocks and seconds are reported on the result
+   page.
+7. Outputs: page-by-page transcript, page thumbnails, `full.srt`, `transcript.md`
 
 Speech transcription always runs locally; the LLM API is used for transcript
 proofreading and titles.

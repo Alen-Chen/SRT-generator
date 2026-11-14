@@ -21,7 +21,9 @@ from fastapi import Body, FastAPI, Form, HTTPException, Request, UploadFile, Fil
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
-from pipeline import merge_videos, process, to_srt
+from pipeline import (compute_drop_blocks, compute_keep_blocks,
+                      cut_video, make_thumbnail, merge_videos, process,
+                      shift_time, to_srt)
 
 logging.basicConfig(level=logging.INFO,
                     format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -473,6 +475,54 @@ def correct_all(segments: list[dict], guide: str,
     return changed
 
 
+def smart_cut_video(job_id: str, outdir: Path, video: Path,
+                    result: dict) -> dict | None:
+    """Drop long silence-only stretches from the video; shift segment/page
+    timestamps to match; regenerate thumbnails against the cut video.
+    Returns a report dict, or None when there is nothing significant to cut."""
+    segs = result.get("segments") or []
+    duration = float(result["duration"])
+    if not segs:
+        return None
+    keep = compute_keep_blocks(segs, duration)
+    drops = compute_drop_blocks(keep, duration)
+    removed = round(sum(de - ds for ds, de in drops), 2)
+    if removed < 1.0:
+        return None
+    clip = UPLOADS / f"{job_id}_clip.mp4"
+    cut_video(video, clip, keep)
+    for s in segs:
+        s["start"] = round(shift_time(s["start"], drops), 2)
+        s["end"] = round(shift_time(s["end"], drops), 2)
+    new_pages: list[dict] = []
+    for p in result["pages"]:
+        ns = round(shift_time(p["start"], drops), 2)
+        ne = round(shift_time(p["end"], drops), 2)
+        p["segments"] = [s for s in p["segments"] if s["end"] > ns + 0.05
+                         and s["start"] < ne - 0.05]
+        if not p["segments"]:
+            continue
+        p["start"], p["end"] = ns, ne
+        new_pages.append(p)
+    result["pages"] = new_pages
+    result["duration"] = round(duration - removed, 2)
+    update_job(job_id, video_path=str(clip))
+    pages_dir = outdir / "pages"
+    pages_dir.mkdir(exist_ok=True)
+    for old in pages_dir.glob("*.jpg"):
+        old.unlink()
+    for i, p in enumerate(new_pages, 1):
+        p["index"] = i
+        span = p["end"] - p["start"]
+        t = p["start"] + min(1.0, span / 2)
+        t = max(p["start"], min(t, p["end"] - 0.1))
+        name = f"{i:03d}.jpg"
+        p["thumb"] = name if make_thumbnail(clip, t, pages_dir / name) else None
+    return {"removed_blocks": [[round(a, 2), round(b, 2)] for a, b in drops],
+            "removed_seconds": removed,
+            "kept_seconds": result["duration"]}
+
+
 def job_meta(text: str) -> dict | None:
     out = chat(
         "Below is material from a lecture video transcript (page titles and/or "
@@ -565,14 +615,36 @@ def run_job(job_id: str) -> None:
         result["merged"] = merged
         pages = result["pages"]
 
+        if job["params"].get("smart_cut") and result["segments"]:
+            set_progress(job_id, "Smart cutting video", 0.85)
+            try:
+                cut = smart_cut_video(job_id, outdir, video, result)
+            except Exception:  # noqa: BLE001
+                log.exception("Job %s smart cut failed; keeping original video",
+                              job_id)
+                cut = None
+            if cut:
+                result["smart_cut"] = cut
+                pages = result["pages"]
+                (outdir / "segments.json").write_text(
+                    json.dumps({"language": result["language"],
+                                "segments": result["segments"]},
+                               ensure_ascii=False, indent=1),
+                    encoding="utf-8")
+                log.info("Job %s smart cut: removed %.1fs in %d block(s)",
+                         job_id, cut["removed_seconds"],
+                         len(cut["removed_blocks"]))
+            else:
+                log.info("Job %s smart cut: nothing worth removing", job_id)
+
         if job["params"].get("correct", 1) and result["segments"]:
-            set_progress(job_id, "Proofreading transcript", 0.85)
+            set_progress(job_id, "Proofreading transcript", 0.87)
             guide = correction_guide(result["segments"])
             changed = 0
             if guide:
                 def cb(done_ct: int, total: int) -> None:
                     set_progress(job_id, "Proofreading transcript",
-                                 0.86 + 0.06 * done_ct / max(total, 1))
+                                 0.88 + 0.05 * done_ct / max(total, 1))
                 changed = correct_all(result["segments"], guide, cb)
             else:
                 log.warning("Job %s: correction guide unavailable, keeping "
@@ -619,7 +691,8 @@ async def create_job(request: Request,
                      language: str = Form("auto"),
                      scene_threshold: float = Form(0.03),
                      reuse_from: str | None = Form(None),
-                     correct: int = Form(1)) -> JSONResponse:
+                     correct: int = Form(1),
+                     smartcut: int = Form(0)) -> JSONResponse:
     user = require_user(request)
     if not 0.005 <= scene_threshold <= 0.5:
         raise HTTPException(400, "scene_threshold must be between 0.005 and 0.5")
@@ -679,6 +752,7 @@ async def create_job(request: Request,
                    "reuse_segments": reuse_segments,
                    "reuse_from": reuse_from,
                    "correct": bool(correct),
+                   "smart_cut": bool(smartcut),
                    "parts": parts},
         "result": None,
     }
