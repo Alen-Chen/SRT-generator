@@ -1,15 +1,15 @@
 <!doctype html>
-<html lang="zh-Hant">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>課程影片．逐頁文字稿</title>
+<title>Course Video · Page Transcripts</title>
 <style>
 :root{--bg:#f4f5f7;--card:#fff;--ink:#1c2733;--mut:#68783b;--line:#e3e7ec;
 --acc:#2563eb;--acc2:#eff4ff;--ok:#15803d;--bad:#b91c1c}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--ink);
-font-family:"Noto Sans TC","PingFang TC","Microsoft JhengHei",system-ui,sans-serif;
+font-family:"Segoe UI",system-ui,-apple-system,sans-serif;
 line-height:1.6}
 header{display:flex;align-items:center;gap:16px;flex-wrap:wrap;
 padding:14px 24px;background:#101828;color:#fff;position:sticky;top:0;z-index:5}
@@ -74,44 +74,44 @@ border-left:1px solid var(--line);padding-left:12px}
 </head>
 <body>
 <header>
-  <h1>課程影片．<span>逐頁文字稿</span></h1>
+  <h1>Course Video · <span>Page Transcripts</span></h1>
   <nav id="history"></nav>
 </header>
 <main>
   <section id="uploadCard" class="card">
     <div class="drop" id="drop">
-      <p><b>拖曳課程影片到此處</b>，或點擊選擇檔案</p>
-      <p class="muted" id="fileInfo">支援 mp4 / mkv / webm / mov 等常見格式，上傳後自動產出逐頁文字稿</p>
+      <p><b>Drag &amp; drop a course video here</b>, or click to choose a file</p>
+      <p class="muted" id="fileInfo">mp4 / mkv / webm / mov and other common formats supported; a page-by-page transcript is generated automatically after upload</p>
       <input type="file" id="file" accept="video/*,.mkv,.ts">
     </div>
     <div class="opts">
-      <label>轉錄模型
+      <label>Transcription model
         <select id="model">
-          <option value="small" selected>small（建議）</option>
-          <option value="base">base（較快）</option>
-          <option value="tiny">tiny（最快）</option>
-          <option value="medium">medium（較準）</option>
+          <option value="small" selected>small (recommended)</option>
+          <option value="base">base (faster)</option>
+          <option value="tiny">tiny (fastest)</option>
+          <option value="medium">medium (more accurate)</option>
           <option value="large-v3-turbo">large-v3-turbo</option>
-          <option value="large-v3">large-v3（最準、較慢）</option>
+          <option value="large-v3">large-v3 (most accurate, slowest)</option>
         </select></label>
-      <label>語言
+      <label>Language
         <select id="lang">
-          <option value="auto" selected>自動偵測</option>
-          <option value="zh">中文</option>
-          <option value="en">英文</option>
-          <option value="ja">日文</option>
-          <option value="ko">韓文</option>
+          <option value="auto" selected>Auto-detect</option>
+          <option value="zh">Chinese</option>
+          <option value="en">English</option>
+          <option value="ja">Japanese</option>
+          <option value="ko">Korean</option>
         </select></label>
-      <label>分頁敏感度
+      <label>Page sensitivity
         <input type="range" id="scene" min="0.01" max="0.2" step="0.005" value="0.03">
         <span id="sceneVal">0.030</span></label>
     </div>
-    <button class="primary" id="submit" disabled>開始處理</button>
+    <button class="primary" id="submit" disabled>Start processing</button>
     <p class="muted" id="upErr"></p>
   </section>
 
   <section id="progressCard" class="card hidden" style="margin-top:18px">
-    <div id="progStep">準備中…</div>
+    <div id="progStep">Preparing…</div>
     <div class="bar"><div id="progFill"></div></div>
     <div class="muted"><span id="progPct">0%</span> <span id="progNote"></span></div>
   </section>
@@ -120,12 +120,12 @@ border-left:1px solid var(--line);padding-left:12px}
     <div class="rhead">
       <h2 id="vtitle"></h2>
       <div class="actions">
-        <span class="rerip">重新分頁 <input type="range" id="rescene" min="0.01" max="0.2" step="0.005" value="0.03">
+        <span class="rerip">Repaginate <input type="range" id="rescene" min="0.01" max="0.2" step="0.005" value="0.03">
           <span id="resceneVal" class="muted">0.030</span>
-          <button id="repag" title="沿用轉錄結果，依新敏感度重新切頁">套用</button></span>
-        <a class="dl" id="dlSrt" href="#">下載 SRT</a>
-        <a class="dl" id="dlMd" href="#">下載 Markdown</a>
-        <button id="back">回到上傳</button>
+          <button id="repag" title="Reuse the transcript and re-split pages with a new sensitivity">Apply</button></span>
+        <a class="dl" id="dlSrt" href="#">Download SRT</a>
+        <a class="dl" id="dlMd" href="#">Download Markdown</a>
+        <button id="back">Back to upload</button>
       </div>
     </div>
     <div class="layout">
@@ -161,8 +161,8 @@ function setFile(f) {
   pickedFile = f || null;
   $("submit").disabled = !pickedFile;
   $("fileInfo").textContent = pickedFile
-    ? `${pickedFile.name}（${(pickedFile.size / 1048576).toFixed(1)} MB）`
-    : "支援 mp4 / mkv / webm / mov 等常見格式，上傳後自動產出逐頁文字稿";
+    ? `${pickedFile.name} (${(pickedFile.size / 1048576).toFixed(1)} MB)`
+    : "mp4 / mkv / webm / mov and other common formats supported; a page-by-page transcript is generated automatically after upload";
 }
 $("scene").addEventListener("input", () =>
   $("sceneVal").textContent = Number($("scene").value).toFixed(3));
@@ -179,7 +179,7 @@ $("repag").addEventListener("click", async () => {
     if (!r.ok) throw new Error((await r.json()).detail || r.status);
     poll((await r.json()).id);
   } catch (e) {
-    alert("重新分頁失敗：" + e.message);
+    alert("Repagination failed: " + e.message);
   } finally {
     $("repag").disabled = false;
   }
@@ -199,7 +199,7 @@ $("submit").addEventListener("click", async () => {
     if (!r.ok) throw new Error((await r.json()).detail || r.status);
     poll((await r.json()).id);
   } catch (e) {
-    $("upErr").textContent = "上傳失敗：" + e.message;
+    $("upErr").textContent = "Upload failed: " + e.message;
     $("submit").disabled = false;
   }
 });
@@ -214,13 +214,13 @@ function poll(id) {
       const r = await fetch("/api/jobs/" + id);
       j = await r.json();
     } catch (e) { pollTimer = setTimeout(tick, 1500); return; }
-    $("progStep").textContent = j.step || "處理中";
+    $("progStep").textContent = j.step || "Processing";
     $("progFill").style.width = Math.round((j.progress || 0) * 100) + "%";
     $("progPct").textContent = Math.round((j.progress || 0) * 100) + "%";
     if (j.status === "done") { showResult(j); loadHistory(); }
     else if (j.status === "error") {
-      $("progStep").innerHTML = '<span class="err">處理失敗：' +
-        (j.error || "未知錯誤") + "</span>";
+      $("progStep").innerHTML = '<span class="err">Processing failed: ' +
+        (j.error || "Unknown error") + "</span>";
       $("progFill").style.background = "var(--bad)";
     } else pollTimer = setTimeout(tick, 900);
   };
@@ -238,7 +238,7 @@ function showResult(j) {
   $("vtitle").textContent = res.title || j.filename;
   $("player").src = `/api/jobs/${j.id}/video`;
   $("vmeta").textContent =
-    `檔案：${j.filename}｜長度：${fmt(res.duration)}｜語言：${res.language}｜共 ${res.pages.length} 頁`;
+    `File: ${j.filename} | Duration: ${fmt(res.duration)} | Language: ${res.language} | ${res.pages.length} pages`;
   $("dlSrt").href = `/api/jobs/${j.id}/export.srt`;
   $("dlMd").href = `/api/jobs/${j.id}/export.md`;
   const host = $("pages");
@@ -247,14 +247,14 @@ function showResult(j) {
     const card = document.createElement("div");
     card.className = "page";
     const media = p.thumb
-      ? `<img loading="lazy" src="/api/jobs/${j.id}/thumb/${p.index}" alt="第${p.index}頁">`
-      : `<div class="noimg">無縮圖</div>`;
+      ? `<img loading="lazy" src="/api/jobs/${j.id}/thumb/${p.index}" alt="Page ${p.index}">`
+      : `<div class="noimg">No thumbnail</div>`;
     const segs = p.segments.map((s) =>
       `<p><a class="ts" data-t="${s.start}">${fmt(s.start)}</a>${esc(s.text)}</p>`).join("");
     card.innerHTML = `${media}<div class="pbody">
-      <div class="phead"><span class="pnum">第 ${p.index} 頁</span>
-      <span class="ptime">${fmt(p.start)} – ${fmt(p.end)}</span><h3>${esc(p.title)}</h3></div>
-      <div class="segs">${segs || '<p class="muted">（此頁無語音）</p>'}</div></div>`;
+      <div class="phead"><span class="pnum">Page ${p.index}</span>
+      <span class="ptime">${fmt(p.start)} - ${fmt(p.end)}</span><h3>${esc(p.title)}</h3></div>
+      <div class="segs">${segs || '<p class="muted">(no speech on this page)</p>'}</div></div>`;
     host.appendChild(card);
   }
   host.querySelectorAll("a.ts").forEach((a) =>
@@ -287,7 +287,7 @@ async function loadHistory() {
     for (const it of items.slice(0, 8)) {
       const b = document.createElement("button");
       b.textContent = it.title || it.filename;
-      b.title = it.filename + "（" + it.status + "）";
+      b.title = `${it.filename} (${it.status})`;
       b.addEventListener("click", () => pollOpen(it.id));
       nav.appendChild(b);
     }

@@ -1,4 +1,4 @@
-"""影片 -> 逐頁文字稿 pipeline（本地 ffmpeg + faster-whisper）。"""
+"""Video -> page-by-page transcript pipeline (local ffmpeg + faster-whisper)."""
 from __future__ import annotations
 
 import json
@@ -33,7 +33,7 @@ def get_duration(video: Path) -> float:
     r = _run(["-i", str(video)], timeout=120)
     m = re.search(r"Duration:\s*(\d+):(\d+):(\d+(?:\.\d+)?)", r.stderr)
     if not m:
-        raise ValueError("無法解析影片長度，可能不是有效的影片檔")
+        raise ValueError("Cannot parse video duration; not a valid video file?")
     h, mnt, sec = m.groups()
     return int(h) * 3600 + int(mnt) * 60 + float(sec)
 
@@ -42,11 +42,11 @@ def extract_audio(video: Path, wav: Path) -> None:
     r = _run(["-i", str(video), "-vn", "-ac", "1", "-ar", "16000",
               "-c:a", "pcm_s16le", str(wav)])
     if r.returncode != 0:
-        raise RuntimeError(f"音訊擷取失敗: {r.stderr[-800:]}")
+        raise RuntimeError(f"Audio extraction failed: {r.stderr[-800:]}")
 
 
 def _scaled_dims(video: Path) -> tuple[int, int]:
-    """取得 320:-2 縮放後的灰階影格寬高。"""
+    """Return grayscale frame size after scale=320:-2."""
     r = subprocess.run(
         [FFMPEG, "-hide_banner", "-nostdin", "-y", "-loglevel", "error",
          "-i", str(video), "-vf", "fps=1,scale=320:-2,format=gray",
@@ -54,13 +54,14 @@ def _scaled_dims(video: Path) -> tuple[int, int]:
         capture_output=True, timeout=120)
     n = len(r.stdout)
     if n < 1024:
-        raise RuntimeError(f"無法解析影格尺寸: {r.stderr.decode()[-400:]}")
+        raise RuntimeError(f"Cannot probe frame size: {r.stderr.decode()[-400:]}")
     return 320, n // (320 * 2) * 2
 
 
 def detect_scenes(video: Path, threshold: float,
                   on_progress: Optional[Callable[[float], None]] = None) -> list[float]:
-    """1fps 取樣灰階影格，以相鄰影格平均絕對差偵測簡報頁面切換（0–1 正規化）。"""
+    """Sample frames at 1fps and detect slide changes via mean absolute frame
+    difference (normalized 0-1) between consecutive samples."""
     import numpy as np
 
     w, h = _scaled_dims(video)
@@ -125,17 +126,18 @@ def load_whisper(size: str):
             except Exception as e:  # noqa: BLE001
                 last_err = e
                 log.warning("Whisper load failed %s: %s", kwargs, e)
-        raise RuntimeError(f"無法載入 Whisper 模型 {size}: {last_err}")
+        raise RuntimeError(f"Failed to load Whisper model {size}: {last_err}")
 
 
 def load_pcm16_mono(wav: Path) -> "np.ndarray":
-    """以標準函式庫解碼 16-bit mono PCM WAV，避免 PyAV 版本相容問題。"""
+    """Decode a 16-bit mono PCM WAV with the stdlib wave module to avoid
+    PyAV version-compatibility issues."""
     import numpy as np
     import wave
 
     with wave.open(str(wav), "rb") as w:
         if w.getnchannels() != 1 or w.getsampwidth() != 2:
-            raise ValueError("音訊需為 16-bit mono PCM")
+            raise ValueError("Audio must be 16-bit mono PCM")
         raw = w.readframes(w.getnframes())
     return np.frombuffer(raw, dtype=np.int16).astype(np.float32) / 32768.0
 
@@ -215,16 +217,17 @@ def process(video: Path, outdir: Path, model_size: str = "small",
     p = progress or (lambda step, pct: None)
     outdir.mkdir(parents=True, exist_ok=True)
 
-    p("讀取影片資訊", 0.01)
+    p("Reading video info", 0.01)
     duration = get_duration(video)
 
     segfile = outdir / "segments.json"
     reused = reuse_segments and segfile.exists()
 
-    p("偵測頁面切換", 0.05)
+    p("Detecting slide changes", 0.05)
     scenes = detect_scenes(
         video, scene_threshold,
-        lambda t: p("偵測頁面切換", 0.05 + 0.15 * min(t / max(duration, 1), 1.0)))
+        lambda t: p("Detecting slide changes",
+                    0.05 + 0.15 * min(t / max(duration, 1), 1.0)))
 
     if reused:
         data = json.loads(segfile.read_text(encoding="utf-8"))
@@ -232,24 +235,24 @@ def process(video: Path, outdir: Path, model_size: str = "small",
             segments, lang = data, "unknown"
         else:
             segments, lang = data["segments"], data.get("language") or "unknown"
-        p("沿用既有轉錄結果", 0.84)
+        p("Reusing existing transcript", 0.84)
     else:
-        p("擷取音訊", 0.20)
+        p("Extracting audio", 0.20)
         wav = outdir / "audio.wav"
         extract_audio(video, wav)
 
-        p("語音轉錄", 0.22)
+        p("Transcribing speech", 0.22)
         segments, lang = transcribe(
             wav, model_size, language, duration,
-            lambda f: p("語音轉錄", 0.22 + 0.60 * min(f, 1.0)))
+            lambda f: p("Transcribing speech", 0.22 + 0.60 * min(f, 1.0)))
         segfile.write_text(
             json.dumps({"language": lang, "segments": segments},
                        ensure_ascii=False, indent=1), encoding="utf-8")
 
-    p("切割頁面", 0.84)
+    p("Splitting pages", 0.84)
     pages = build_pages(segments, scenes, duration)
 
-    p("產生頁面縮圖", 0.85)
+    p("Generating page thumbnails", 0.85)
     pages_dir = outdir / "pages"
     pages_dir.mkdir(exist_ok=True)
     for i, page in enumerate(pages, 1):
@@ -259,7 +262,7 @@ def process(video: Path, outdir: Path, model_size: str = "small",
         thumb = pages_dir / f"{i:03d}.jpg"
         page["index"] = i
         page["thumb"] = thumb.name if make_thumbnail(video, t, thumb) else None
-    p("產生頁面縮圖", 0.95)
+    p("Generating page thumbnails", 0.95)
 
     return {"duration": round(duration, 2), "language": lang,
             "segments": segments, "pages": pages}

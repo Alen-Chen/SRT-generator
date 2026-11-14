@@ -3,5 +3,5 @@ data/
 __pycache__/
 *.pyc
 server.log
-# 測試影片过大，不進版本控制
+# test videos are too large for git
 test_pattern/
