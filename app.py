@@ -17,7 +17,7 @@ from fastapi import FastAPI, Form, HTTPException, Request, UploadFile, File
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
-from pipeline import process, to_srt
+from pipeline import merge_videos, process, to_srt
 
 logging.basicConfig(level=logging.INFO,
                     format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -198,16 +198,32 @@ def fmt_ts(sec: float) -> str:
 
 def run_job(job_id: str) -> None:
     job = jobs[job_id]
-    video = Path(job["video_path"])
     outdir = JOBS / job_id
     try:
         update_job(job_id, status="running", step="Preparing", progress=0.0)
+        parts = [Path(p) for p in job["params"].get("parts") or []]
+        merged = len(parts) > 1 or bool(job.get("merged_from"))
+        video = Path(job["video_path"])
+        if len(parts) > 1:
+            set_progress(job_id, "Merging videos", 0.01)
+            out = UPLOADS / f"{job_id}{parts[0].suffix or '.mp4'}"
+            merge_videos(parts, out)
+            for pt in parts:
+                pt.unlink(missing_ok=True)
+            video = out
+            update_job(job_id, video_path=str(video), merged_from=True)
+            set_progress(job_id, "Merging videos", 0.04)
+
+        def prog(step: str, pct: float) -> None:
+            set_progress(job_id, step, 0.05 + 0.93 * pct if merged else pct)
+
         result = process(video, outdir,
                          model_size=job["params"]["model"],
                          language=job["params"]["language"],
                          scene_threshold=job["params"]["scene_threshold"],
                          reuse_segments=job["params"].get("reuse_segments", False),
-                         progress=lambda step, pct: set_progress(job_id, step, pct))
+                         progress=prog)
+        result["merged"] = merged
         pages = result["pages"]
 
         set_progress(job_id, "Generating page titles", 0.955)
@@ -235,7 +251,7 @@ def run_job(job_id: str) -> None:
 
 
 @app.post("/api/jobs")
-async def create_job(file: UploadFile | None = File(None),
+async def create_job(files: list[UploadFile] = File(default=[]),
                      model: str = Form(DEFAULT_WHISPER),
                      language: str = Form("auto"),
                      scene_threshold: float = Form(0.03),
@@ -248,10 +264,13 @@ async def create_job(file: UploadFile | None = File(None),
     job_id = uuid.uuid4().hex[:12]
     (JOBS / job_id).mkdir(parents=True, exist_ok=True)
 
+    files = [f for f in (files or []) if f and f.filename]
     reuse_segments = False
+    parts: list[str] = []
     video_path = None
     filename = None
-    if reuse_from:
+    merged_from = False
+    if reuse_from and not files:
         src = get_job_or_404(reuse_from)
         seg_src = JOBS / reuse_from / "segments.json"
         if not seg_src.exists():
@@ -260,36 +279,40 @@ async def create_job(file: UploadFile | None = File(None),
         if not video_path.exists():
             raise HTTPException(400, "Source job video file no longer exists")
         filename = src["filename"]
+        merged_from = bool(src.get("merged_from")) or \
+            bool((src.get("result") or {}).get("merged"))
         shutil.copyfile(seg_src, JOBS / job_id / "segments.json")
         reuse_segments = True
-        if file is not None and file.filename:
-            ext = Path(file.filename).suffix.lower() or ".mp4"
+    if files:
+        for i, f in enumerate(files):
+            ext = Path(f.filename).suffix.lower() or ".mp4"
             if ext not in VIDEO_EXTS:
                 raise HTTPException(400, f"Unsupported file format: {ext}")
-            video_path = UPLOADS / f"{job_id}{ext}"
-            with video_path.open("wb") as f:
-                shutil.copyfileobj(file.file, f)
-    else:
-        if not file or not file.filename:
-            raise HTTPException(400, "Missing file")
-        ext = Path(file.filename).suffix.lower() or ".mp4"
-        if ext not in VIDEO_EXTS:
-            raise HTTPException(400, f"Unsupported file format: {ext}")
-        filename = file.filename
-        video_path = UPLOADS / f"{job_id}{ext}"
-        with video_path.open("wb") as f:
-            shutil.copyfileobj(file.file, f)
+            part = UPLOADS / f"{job_id}_p{i:02d}{ext}"
+            with part.open("wb") as fh:
+                shutil.copyfileobj(f.file, fh)
+            parts.append(str(part))
+        names = [Path(f.filename).name for f in files]
+        filename = names[0] if len(names) == 1 else f"{names[0]} (+{len(names) - 1} more)"
+        video_path = Path(parts[0])
+    if not filename:
+        raise HTTPException(400, "Missing file")
 
     job = {
         "id": job_id,
         "filename": Path(filename).name,
+        "merged_from": merged_from,
+        "export_stem": re.sub(r"[^\w\-]+", "_",
+                              Path(files[0].filename if files
+                                   else filename).stem)[:40] or "transcript",
         "video_path": str(video_path),
         "status": "queued", "step": "Queued", "progress": 0.0, "error": None,
         "created_at": datetime.now().isoformat(timespec="seconds"),
         "params": {"model": model, "language": language,
                    "scene_threshold": scene_threshold,
                    "reuse_segments": reuse_segments,
-                   "reuse_from": reuse_from},
+                   "reuse_from": reuse_from,
+                   "parts": parts},
         "result": None,
     }
     with jobs_lock:
@@ -371,11 +394,16 @@ def range_response(path: Path, request: Request, media: str):
 
 
 @app.get("/api/jobs/{job_id}/video")
-def job_video(job_id: str, request: Request):
+def job_video(job_id: str, request: Request, download: int = 0):
     job = get_job_or_404(job_id)
     path = Path(job["video_path"])
     if not path.exists():
         raise HTTPException(404, "Video file not found")
+    if download:
+        stem = job.get("export_stem") or re.sub(
+            r"[^\w\-]+", "_", Path(job["filename"]).stem)[:40]
+        return FileResponse(path, media_type="video/mp4",
+                            filename=f"{stem}{path.suffix}")
     return range_response(path, request, "video/mp4")
 
 
@@ -390,7 +418,8 @@ def job_export(job_id: str, fmt: str) -> FileResponse:
     path = JOBS / job_id / mapping[fmt]
     if not path.exists():
         raise HTTPException(404, "File not found")
-    stem = re.sub(r"[^\w\-]+", "_", Path(job["filename"]).stem)[:40]
+    stem = job.get("export_stem") or re.sub(
+        r"[^\w\-]+", "_", Path(job["filename"]).stem)[:40]
     return FileResponse(path, filename=f"{stem}.{fmt}")
 
 

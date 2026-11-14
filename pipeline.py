@@ -45,6 +45,65 @@ def extract_audio(video: Path, wav: Path) -> None:
         raise RuntimeError(f"Audio extraction failed: {r.stderr[-800:]}")
 
 
+def probe_streams(video: Path) -> dict:
+    r = _run(["-i", str(video)], timeout=120)
+    out = {"video": False, "audio": False}
+    for m in re.finditer(r"Stream #\d+:\d+[^(]*\((\w+)\)", r.stderr):
+        t = m.group(1)
+        if t == "Video":
+            out["video"] = True
+        elif t == "Audio":
+            out["audio"] = True
+    return out
+
+
+def merge_videos(parts: list[Path], out: Path) -> None:
+    """Concatenate part files into one video.
+
+    Fast path: container concat demuxer with stream copy. If codecs are
+    incompatible, fall back to re-encoding with the concat filter."""
+    if len(parts) < 2:
+        raise ValueError("Merging requires at least two files")
+    for p in parts:
+        if not p.exists():
+            raise FileNotFoundError(f"Missing part file: {p}")
+    lst = out.with_name(out.name + ".concat")
+    lst.write_text("".join(f"file '{p}'\n" for p in parts), encoding="utf-8")
+    try:
+        r = _run(["-f", "concat", "-safe", "0", "-i", str(lst),
+                  "-c", "copy", str(out)])
+        if r.returncode == 0 and out.exists() and out.stat().st_size > 0:
+            return
+        log.warning("Concat copy failed, falling back to re-encode: %s",
+                    r.stderr[-400:])
+    finally:
+        lst.unlink(missing_ok=True)
+
+    info = [probe_streams(p) for p in parts]
+    if not all(i["video"] for i in info):
+        raise RuntimeError("Merge failed: some parts contain no video stream")
+    pre, labels = [], []
+    for i, inf in enumerate(info):
+        if inf["audio"]:
+            alab = f"[{i}:a]"
+        else:
+            alab = f"[sil{i}]"
+            pre.append(f"anullsrc=channel_layout=stereo:sample_rate=48000[sil{i}]")
+        labels.append(f"[{i}:v]{alab}")
+    chain = ";".join(pre + ["".join(labels) +
+                            f"concat=n={len(parts)}:v=1:a=1[v][a]"])
+    args: list[str] = []
+    for p in parts:
+        args += ["-i", str(p)]
+    args += ["-filter_complex", chain, "-map", "[v]", "-map", "[a]",
+             "-c:v", "libx264", "-preset", "veryfast", "-crf", "23",
+             "-c:a", "aac", str(out)]
+    r2 = _run(args, timeout=None)
+    if r2.returncode != 0 or not out.exists() or out.stat().st_size == 0:
+        out.unlink(missing_ok=True)
+        raise RuntimeError(f"Merge failed: {(r2.stderr or r.stderr)[-800:]}")
+
+
 def _scaled_dims(video: Path) -> tuple[int, int]:
     """Return grayscale frame size after scale=320:-2."""
     r = subprocess.run(

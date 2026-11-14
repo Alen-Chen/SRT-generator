@@ -31,6 +31,14 @@ padding:20px 22px;box-shadow:0 1px 3px rgba(16,24,40,.06)}
 cursor:pointer;transition:.15s}
 .drop.over{border-color:var(--acc);background:var(--acc2)}
 .drop input[type=file]{display:none}
+#fileList{margin-top:10px}
+.fitem{display:flex;align-items:center;gap:10px;font-size:13px;border:1px solid var(--line);
+border-radius:8px;padding:5px 12px;background:#fff;margin-top:6px}
+.fitem .fnum{background:var(--acc2);color:var(--acc);font-weight:700;font-size:11px;
+padding:2px 8px;border-radius:99px}
+.fitem .fname{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fitem .fsz{color:#667085;font-size:12px}
+.fitem .rm{border:0;background:none;color:#b91c1c;font-size:15px;cursor:pointer;padding:0 4px}
 .muted{color:#667085;font-size:13px}
 .opts{display:flex;gap:22px;flex-wrap:wrap;margin:16px 0;align-items:center;font-size:14px}
 .opts label{display:flex;align-items:center;gap:8px}
@@ -92,8 +100,9 @@ border-left:1px solid var(--line);padding-left:12px}
     <div class="drop" id="drop">
       <p data-i18n-html="drop"></p>
       <p class="muted" id="fileInfo" data-i18n="fileInfo"></p>
-      <input type="file" id="file" accept="video/*,.mkv,.ts">
+      <input type="file" id="file" accept="video/*,.mkv,.ts" multiple>
     </div>
+    <div id="fileList" class="hidden"></div>
     <div class="opts">
       <label><span data-i18n="model"></span>
         <select id="model">
@@ -133,6 +142,7 @@ border-left:1px solid var(--line);padding-left:12px}
         <span class="rerip"><span data-i18n="repag"></span> <input type="range" id="rescene" min="0.01" max="0.2" step="0.005" value="0.03">
           <span id="resceneVal" class="muted">0.030</span>
           <button id="repag" data-i18n="apply" data-tip="repagTip"></button></span>
+        <a class="dl hidden" id="dlVideo" href="#" data-i18n="dlVideo"></a>
         <a class="dl" id="dlSrt" href="#" data-i18n="dlSrt"></a>
         <a class="dl" id="dlMd" href="#" data-i18n="dlMd"></a>
         <button id="back" data-i18n="back"></button>
@@ -149,7 +159,7 @@ border-left:1px solid var(--line);padding-left:12px}
 </main>
 <script>
 const $ = (id) => document.getElementById(id);
-let pickedFile = null, pollTimer = null, curId = null, lastJob = null;
+let pickedFiles = [], pollTimer = null, curId = null, lastJob = null;
 
 const I18N = {
 en: {
@@ -166,7 +176,8 @@ opt_auto: "Auto-detect", opt_zh: "Chinese", opt_en: "English", opt_ja: "Japanese
 sens: "Page sensitivity",
 start: "Start processing", preparing: "Preparing…",
 repag: "Repaginate", repagTip: "Reuse the transcript and re-split pages with a new sensitivity",
-apply: "Apply", dlSrt: "Download SRT", dlMd: "Download Markdown", back: "Back to upload",
+apply: "Apply", dlSrt: "Download SRT", dlMd: "Download Markdown", dlVideo: "Download merged video", back: "Back to upload",
+mergeNote: "{n} files selected (total {mb}); they will be merged into one video before transcription", removeFile: "Remove", step_merge: "Merging videos",
 noThumb: "No thumbnail", noSpeech: "(no speech on this page)", pageN: "Page %d",
 vmeta: "File: {f} | Duration: {d} | Language: {l} | {n} pages",
 uploadFail: "Upload failed: ", repagFail: "Repagination failed: ",
@@ -192,7 +203,8 @@ opt_auto: "自動偵測", opt_zh: "中文", opt_en: "英文", opt_ja: "日文", 
 sens: "分頁敏感度",
 start: "開始處理", preparing: "準備中…",
 repag: "重新分頁", repagTip: "沿用轉錄結果，依新敏感度重新切頁",
-apply: "套用", dlSrt: "下載 SRT", dlMd: "下載 Markdown", back: "回到上傳",
+apply: "套用", dlSrt: "下載 SRT", dlMd: "下載 Markdown", dlVideo: "下載合併影片", back: "回到上傳",
+mergeNote: "已選 {n} 個檔案（共 {mb}），轉錄前將先合併為一支影片", removeFile: "移除", step_merge: "合併影片",
 noThumb: "無縮圖", noSpeech: "（此頁無語音）", pageN: "第 %d 頁",
 vmeta: "檔案：{f}｜長度：{d}｜語言：{l}｜共 {n} 頁",
 uploadFail: "上傳失敗：", repagFail: "重新分頁失敗：",
@@ -218,7 +230,8 @@ opt_auto: "自动检测", opt_zh: "中文", opt_en: "英文", opt_ja: "日文", 
 sens: "分页敏感度",
 start: "开始处理", preparing: "准备中…",
 repag: "重新分页", repagTip: "沿用转录结果，按新敏感度重新切页",
-apply: "应用", dlSrt: "下载 SRT", dlMd: "下载 Markdown", back: "返回上传",
+apply: "应用", dlSrt: "下载 SRT", dlMd: "下载 Markdown", dlVideo: "下载合并视频", back: "返回上传",
+mergeNote: "已选 {n} 个文件（共 {mb}），转录前将先合并为一个视频", removeFile: "移除", step_merge: "合并视频",
 noThumb: "无缩图", noSpeech: "（本页无语音）", pageN: "第 %d 页",
 vmeta: "文件：{f}｜时长：{d}｜语言：{l}｜共 {n} 页",
 uploadFail: "上传失败：", repagFail: "重新分页失败：",
@@ -244,7 +257,8 @@ opt_auto: "自動判別", opt_zh: "中国語", opt_en: "英語", opt_ja: "日本
 sens: "ページ分割感度",
 start: "処理を開始", preparing: "準備中…",
 repag: "再ページ区切り", repagTip: "既存の文字起こしを再利用し、新しい感度でページを再分割します",
-apply: "適用", dlSrt: "SRT をダウンロード", dlMd: "Markdown をダウンロード", back: "アップロードに戻る",
+apply: "適用", dlSrt: "SRT をダウンロード", dlMd: "Markdown をダウンロード", dlVideo: "結合後の動画をダウンロード", back: "アップロードに戻る",
+mergeNote: "{n} 個のファイルを選択中（合計 {mb}）。文字起こし前に1本の動画へ結合します", removeFile: "削除", step_merge: "動画を結合",
 noThumb: "サムネイルなし", noSpeech: "（このページに音声はありません）", pageN: "%d ページ目",
 vmeta: "ファイル：{f}｜再生時間：{d}｜言語：{l}｜全 {n} ページ",
 uploadFail: "アップロード失敗：", repagFail: "再ページ区切り失敗：",
@@ -259,7 +273,7 @@ step_pageTitles: "ページタイトル生成", step_videoTitle: "コースタ�
 };
 
 const STEPS = {
-"Queued": "st_queued", "Preparing": "step_preparing",
+"Queued": "st_queued", "Preparing": "step_preparing", "Merging videos": "step_merge",
 "Reading video info": "step_reading", "Detecting slide changes": "step_detect",
 "Extracting audio": "step_audio", "Transcribing speech": "step_transcribe",
 "Splitting pages": "step_split", "Generating page thumbnails": "step_thumbs",
@@ -298,7 +312,8 @@ function applyLang() {
     el.title = t(el.dataset.tip);
   });
   $("uiLang").value = saved;
-  if (!pickedFile) $("fileInfo").textContent = t("fileInfo");
+  if (!$("fileList").classList.contains("hidden")) renderFileList();
+  else $("fileInfo").textContent = t("fileInfo");
   if (!$("result").classList.contains("hidden") && lastJob) showResult(lastJob);
   else if (!$("progressCard").classList.contains("hidden") && lastJob) renderProg(lastJob);
 }
@@ -317,20 +332,62 @@ const fmt = (s) => {
   return h ? `${p(h)}:${p(m)}:${p(sec)}` : `${p(m)}:${p(sec)}`;
 };
 $("drop").addEventListener("click", () => $("file").click());
-$("file").addEventListener("change", () => setFile($("file").files[0]));
+$("file").addEventListener("change", () => {
+  setFiles(Array.from($("file").files));
+  $("file").value = "";
+});
 for (const ev of ["dragover", "dragleave", "drop"]) {
   $("drop").addEventListener(ev, (e) => {
     e.preventDefault();
     $("drop").classList.toggle("over", ev === "dragover");
-    if (ev === "drop") setFile(e.dataTransfer.files[0]);
+    if (ev === "drop") setFiles(Array.from(e.dataTransfer.files));
   });
 }
-function setFile(f) {
-  pickedFile = f || null;
-  $("submit").disabled = !pickedFile;
-  $("fileInfo").textContent = pickedFile
-    ? `${pickedFile.name} (${(pickedFile.size / 1048576).toFixed(1)} MB)`
-    : t("fileInfo");
+function setFiles(list) {
+  pickedFiles = (list || []).filter((f) =>
+    f && (f.type.startsWith("video/") || /\.(mp4|mkv|webm|mov|avi|flv|m4v|ts|mpg|mpeg|wmv)$/i.test(f.name)));
+  renderFileList();
+}
+function renderFileList() {
+  const host = $("fileList");
+  host.innerHTML = "";
+  const n = pickedFiles.length;
+  host.classList.toggle("hidden", n === 0);
+  pickedFiles.forEach((f, i) => {
+    const row = document.createElement("div");
+    row.className = "fitem";
+    const name = document.createElement("span");
+    name.className = "fname";
+    name.textContent = f.name;
+    const num = document.createElement("span");
+    num.className = "fnum";
+    num.textContent = "#" + (i + 1);
+    const sz = document.createElement("span");
+    sz.className = "fsz";
+    sz.textContent = (f.size / 1048576).toFixed(1) + " MB";
+    const rm = document.createElement("button");
+    rm.className = "rm";
+    rm.title = t("removeFile");
+    rm.textContent = "×";
+    rm.addEventListener("click", () => {
+      pickedFiles.splice(i, 1);
+      renderFileList();
+    });
+    row.append(num, name, sz, rm);
+    host.appendChild(row);
+  });
+  if (n === 1) {
+    $("fileInfo").textContent =
+      `${pickedFiles[0].name} (${(pickedFiles[0].size / 1048576).toFixed(1)} MB)`;
+  } else if (n > 1) {
+    const total = pickedFiles.reduce((s, f) => s + f.size, 0);
+    $("fileInfo").textContent = t("mergeNote")
+      .replace("{n}", n)
+      .replace("{mb}", (total / 1048576).toFixed(1) + " MB");
+  } else {
+    $("fileInfo").textContent = t("fileInfo");
+  }
+  $("submit").disabled = n === 0;
 }
 $("scene").addEventListener("input", () =>
   $("sceneVal").textContent = Number($("scene").value).toFixed(3));
@@ -354,11 +411,11 @@ $("repag").addEventListener("click", async () => {
 });
 
 $("submit").addEventListener("click", async () => {
-  if (!pickedFile) return;
+  if (!pickedFiles.length) return;
   $("submit").disabled = true;
   $("upErr").textContent = "";
   const fd = new FormData();
-  fd.append("file", pickedFile);
+  for (const f of pickedFiles) fd.append("files", f);
   fd.append("model", $("model").value);
   fd.append("language", $("lang").value);
   fd.append("scene_threshold", $("scene").value);
@@ -424,6 +481,9 @@ function showResult(j) {
     .replace("{l}", res.language).replace("{n}", res.pages.length);
   $("dlSrt").href = `/api/jobs/${j.id}/export.srt`;
   $("dlMd").href = `/api/jobs/${j.id}/export.md`;
+  const dlV = $("dlVideo");
+  dlV.href = `/api/jobs/${j.id}/video?download=1`;
+  dlV.classList.toggle("hidden", !res.merged);
   const host = $("pages");
   host.innerHTML = "";
   for (const p of res.pages) {
@@ -459,7 +519,7 @@ $("back").addEventListener("click", () => {
   $("result").classList.add("hidden");
   $("progressCard").classList.add("hidden");
   $("uploadCard").classList.remove("hidden");
-  $("submit").disabled = !pickedFile;
+  $("submit").disabled = pickedFiles.length === 0;
   loadHistory();
 });
 

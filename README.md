@@ -32,6 +32,11 @@ cp config.example.json config.json   # then edit api_key
 
 Open <http://127.0.0.1:8080> and drag a video in.
 
+Multiple part files of one course session can be selected/dropped together:
+they are merged into a single video first (ffmpeg concat, stream copy with
+re-encode fallback), then processed as one; the merged video is downloadable
+from the result page.
+
 ## UI languages
 
 English, 繁體中文, 简体中文 and 日本語. The default language is auto-detected
