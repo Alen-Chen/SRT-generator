@@ -32,6 +32,13 @@ cp config.example.json config.json   # then edit api_key
 
 Open <http://127.0.0.1:8080> and drag a video in.
 
+## UI languages
+
+English, 繁體中文, 简体中文 and 日本語. The default language is auto-detected
+from the browser settings (zh-TW/HK/MO/Hant → Traditional, other zh →
+Simplified, ja → Japanese, otherwise English) and can be overridden with the
+selector in the header (persisted in localStorage).
+
 ## Configuration
 
 Copy `config.example.json` to `config.json` and fill in your API credentials.

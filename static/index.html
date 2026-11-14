@@ -9,12 +9,15 @@
 --acc:#2563eb;--acc2:#eff4ff;--ok:#15803d;--bad:#b91c1c}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--ink);
-font-family:"Segoe UI",system-ui,-apple-system,sans-serif;
+font-family:"Segoe UI",system-ui,-apple-system,"Noto Sans TC","PingFang TC",
+"Microsoft JhengHei","Noto Sans JP","Hiragino Sans","Yu Gothic",sans-serif;
 line-height:1.6}
 header{display:flex;align-items:center;gap:16px;flex-wrap:wrap;
 padding:14px 24px;background:#101828;color:#fff;position:sticky;top:0;z-index:5}
 header h1{font-size:18px;margin:0;font-weight:700}
-header h1 span{color:#7fb0ff}
+header h1 .hl{color:#7fb0ff}
+#uiLang{background:#1d2b40;color:#cdd9ea;border:1px solid #33415c;border-radius:8px;
+padding:4px 8px;font:inherit;font-size:12px;cursor:pointer}
 #history{margin-left:auto;display:flex;gap:8px;flex-wrap:wrap}
 #history button{background:#1d2b40;color:#cdd9ea;border:1px solid #33415c;
 border-radius:99px;padding:4px 12px;font-size:12px;cursor:pointer;max-width:220px;
@@ -74,44 +77,51 @@ border-left:1px solid var(--line);padding-left:12px}
 </head>
 <body>
 <header>
-  <h1>Course Video · <span>Page Transcripts</span></h1>
+  <h1><span data-i18n="brand1"></span> · <span class="hl" data-i18n="brand2"></span></h1>
+  <select id="uiLang" title="Interface language">
+    <option value="auto">Auto</option>
+    <option value="en">English</option>
+    <option value="zh-TW">繁體中文</option>
+    <option value="zh-CN">简体中文</option>
+    <option value="ja">日本語</option>
+  </select>
   <nav id="history"></nav>
 </header>
 <main>
   <section id="uploadCard" class="card">
     <div class="drop" id="drop">
-      <p><b>Drag &amp; drop a course video here</b>, or click to choose a file</p>
-      <p class="muted" id="fileInfo">mp4 / mkv / webm / mov and other common formats supported; a page-by-page transcript is generated automatically after upload</p>
+      <p data-i18n-html="drop"></p>
+      <p class="muted" id="fileInfo" data-i18n="fileInfo"></p>
       <input type="file" id="file" accept="video/*,.mkv,.ts">
     </div>
     <div class="opts">
-      <label>Transcription model
+      <label><span data-i18n="model"></span>
         <select id="model">
-          <option value="small" selected>small (recommended)</option>
-          <option value="base">base (faster)</option>
-          <option value="tiny">tiny (fastest)</option>
-          <option value="medium">medium (more accurate)</option>
-          <option value="large-v3-turbo">large-v3-turbo</option>
-          <option value="large-v3">large-v3 (most accurate, slowest)</option>
+          <option value="small" data-i18n="opt_small"></option>
+          <option value="base" data-i18n="opt_base"></option>
+          <option value="tiny" data-i18n="opt_tiny"></option>
+          <option value="medium" data-i18n="opt_medium"></option>
+          <option value="large-v3-turbo" data-i18n="opt_turbo"></option>
+          <option value="large-v3" data-i18n="opt_large"></option>
         </select></label>
-      <label>Language
+      <label><span data-i18n="speech"></span>
         <select id="lang">
-          <option value="auto" selected>Auto-detect</option>
-          <option value="zh">Chinese</option>
-          <option value="en">English</option>
-          <option value="ja">Japanese</option>
-          <option value="ko">Korean</option>
+          <option value="auto" data-i18n="opt_auto"></option>
+          <option value="zh" data-i18n="opt_zh"></option>
+          <option value="en" data-i18n="opt_en"></option>
+          <option value="ja" data-i18n="opt_ja"></option>
+          <option value="ko" data-i18n="opt_ko"></option>
         </select></label>
-      <label>Page sensitivity
+      <label><span data-i18n="sens"></span>
         <input type="range" id="scene" min="0.01" max="0.2" step="0.005" value="0.03">
         <span id="sceneVal">0.030</span></label>
     </div>
-    <button class="primary" id="submit" disabled>Start processing</button>
+    <button class="primary" id="submit" disabled data-i18n="start"></button>
     <p class="muted" id="upErr"></p>
   </section>
 
   <section id="progressCard" class="card hidden" style="margin-top:18px">
-    <div id="progStep">Preparing…</div>
+    <div id="progStep" data-i18n="preparing"></div>
     <div class="bar"><div id="progFill"></div></div>
     <div class="muted"><span id="progPct">0%</span> <span id="progNote"></span></div>
   </section>
@@ -120,12 +130,12 @@ border-left:1px solid var(--line);padding-left:12px}
     <div class="rhead">
       <h2 id="vtitle"></h2>
       <div class="actions">
-        <span class="rerip">Repaginate <input type="range" id="rescene" min="0.01" max="0.2" step="0.005" value="0.03">
+        <span class="rerip"><span data-i18n="repag"></span> <input type="range" id="rescene" min="0.01" max="0.2" step="0.005" value="0.03">
           <span id="resceneVal" class="muted">0.030</span>
-          <button id="repag" title="Reuse the transcript and re-split pages with a new sensitivity">Apply</button></span>
-        <a class="dl" id="dlSrt" href="#">Download SRT</a>
-        <a class="dl" id="dlMd" href="#">Download Markdown</a>
-        <button id="back">Back to upload</button>
+          <button id="repag" data-i18n="apply" data-tip="repagTip"></button></span>
+        <a class="dl" id="dlSrt" href="#" data-i18n="dlSrt"></a>
+        <a class="dl" id="dlMd" href="#" data-i18n="dlMd"></a>
+        <button id="back" data-i18n="back"></button>
       </div>
     </div>
     <div class="layout">
@@ -139,7 +149,166 @@ border-left:1px solid var(--line);padding-left:12px}
 </main>
 <script>
 const $ = (id) => document.getElementById(id);
-let pickedFile = null, pollTimer = null, curId = null;
+let pickedFile = null, pollTimer = null, curId = null, lastJob = null;
+
+const I18N = {
+en: {
+pageTitle: "Course Video · Page Transcripts",
+brand1: "Course Video", brand2: "Page Transcripts",
+drop: "<b>Drag &amp; drop a course video here</b>, or click to choose a file",
+fileInfo: "mp4 / mkv / webm / mov and other common formats supported; a page-by-page transcript is generated automatically after upload",
+model: "Transcription model",
+opt_small: "small (recommended)", opt_base: "base (faster)", opt_tiny: "tiny (fastest)",
+opt_medium: "medium (more accurate)", opt_turbo: "large-v3-turbo",
+opt_large: "large-v3 (most accurate, slowest)",
+speech: "Speech language",
+opt_auto: "Auto-detect", opt_zh: "Chinese", opt_en: "English", opt_ja: "Japanese", opt_ko: "Korean",
+sens: "Page sensitivity",
+start: "Start processing", preparing: "Preparing…",
+repag: "Repaginate", repagTip: "Reuse the transcript and re-split pages with a new sensitivity",
+apply: "Apply", dlSrt: "Download SRT", dlMd: "Download Markdown", back: "Back to upload",
+noThumb: "No thumbnail", noSpeech: "(no speech on this page)", pageN: "Page %d",
+vmeta: "File: {f} | Duration: {d} | Language: {l} | {n} pages",
+uploadFail: "Upload failed: ", repagFail: "Repagination failed: ",
+procFail: "Processing failed: ", unknownErr: "Unknown error", processing: "Processing",
+st_queued: "Queued", st_running: "Running", st_done: "Done", st_error: "Error",
+step_preparing: "Preparing", step_reading: "Reading video info",
+step_detect: "Detecting slide changes", step_audio: "Extracting audio",
+step_transcribe: "Transcribing speech", step_split: "Splitting pages",
+step_thumbs: "Generating page thumbnails", step_reuse: "Reusing existing transcript",
+step_pageTitles: "Generating page titles", step_videoTitle: "Generating course title"
+},
+"zh-TW": {
+pageTitle: "課程影片．逐頁文字稿",
+brand1: "課程影片", brand2: "逐頁文字稿",
+drop: "<b>拖曳課程影片到此處</b>，或點擊選擇檔案",
+fileInfo: "支援 mp4 / mkv / webm / mov 等常見格式，上傳後自動產出逐頁文字稿",
+model: "轉錄模型",
+opt_small: "small（建議）", opt_base: "base（較快）", opt_tiny: "tiny（最快）",
+opt_medium: "medium（較準）", opt_turbo: "large-v3-turbo",
+opt_large: "large-v3（最準、較慢）",
+speech: "語音語言",
+opt_auto: "自動偵測", opt_zh: "中文", opt_en: "英文", opt_ja: "日文", opt_ko: "韓文",
+sens: "分頁敏感度",
+start: "開始處理", preparing: "準備中…",
+repag: "重新分頁", repagTip: "沿用轉錄結果，依新敏感度重新切頁",
+apply: "套用", dlSrt: "下載 SRT", dlMd: "下載 Markdown", back: "回到上傳",
+noThumb: "無縮圖", noSpeech: "（此頁無語音）", pageN: "第 %d 頁",
+vmeta: "檔案：{f}｜長度：{d}｜語言：{l}｜共 {n} 頁",
+uploadFail: "上傳失敗：", repagFail: "重新分頁失敗：",
+procFail: "處理失敗：", unknownErr: "未知錯誤", processing: "處理中",
+st_queued: "排隊中", st_running: "執行中", st_done: "完成", st_error: "錯誤",
+step_preparing: "準備中", step_reading: "讀取影片資訊",
+step_detect: "偵測頁面切換", step_audio: "擷取音軌",
+step_transcribe: "語音轉錄", step_split: "切分頁面",
+step_thumbs: "產生頁面縮圖", step_reuse: "沿用既有轉錄",
+step_pageTitles: "生成頁面標題", step_videoTitle: "生成課程標題"
+},
+"zh-CN": {
+pageTitle: "课程视频 · 逐页文稿",
+brand1: "课程视频", brand2: "逐页文稿",
+drop: "<b>拖放课程视频到此处</b>，或点击选择文件",
+fileInfo: "支持 mp4 / mkv / webm / mov 等常见格式，上传后自动生成逐页文稿",
+model: "转录模型",
+opt_small: "small（推荐）", opt_base: "base（更快）", opt_tiny: "tiny（最快）",
+opt_medium: "medium（更准）", opt_turbo: "large-v3-turbo",
+opt_large: "large-v3（最准、较慢）",
+speech: "语音语言",
+opt_auto: "自动检测", opt_zh: "中文", opt_en: "英文", opt_ja: "日文", opt_ko: "韩文",
+sens: "分页敏感度",
+start: "开始处理", preparing: "准备中…",
+repag: "重新分页", repagTip: "沿用转录结果，按新敏感度重新切页",
+apply: "应用", dlSrt: "下载 SRT", dlMd: "下载 Markdown", back: "返回上传",
+noThumb: "无缩图", noSpeech: "（本页无语音）", pageN: "第 %d 页",
+vmeta: "文件：{f}｜时长：{d}｜语言：{l}｜共 {n} 页",
+uploadFail: "上传失败：", repagFail: "重新分页失败：",
+procFail: "处理失败：", unknownErr: "未知错误", processing: "处理中",
+st_queued: "排队中", st_running: "运行中", st_done: "完成", st_error: "错误",
+step_preparing: "准备中", step_reading: "读取视频信息",
+step_detect: "检测页面切换", step_audio: "提取音频",
+step_transcribe: "语音转录", step_split: "切分页面",
+step_thumbs: "生成页面缩图", step_reuse: "复用已有转录",
+step_pageTitles: "生成页面标题", step_videoTitle: "生成课程标题"
+},
+ja: {
+pageTitle: "講義動画 · ページ別文字起こし",
+brand1: "講義動画", brand2: "ページ別文字起こし",
+drop: "<b>講義動画をここにドラッグ＆ドロップ</b>、またはクリックしてファイルを選択",
+fileInfo: "mp4 / mkv / webm / mov など一般的な形式に対応。アップロード後にページ別の文字起こしを自動生成します",
+model: "文字起こしモデル",
+opt_small: "small（推奨）", opt_base: "base（高速）", opt_tiny: "tiny（最速）",
+opt_medium: "medium（高精度）", opt_turbo: "large-v3-turbo",
+opt_large: "large-v3（最精度・低速）",
+speech: "音声言語",
+opt_auto: "自動判別", opt_zh: "中国語", opt_en: "英語", opt_ja: "日本語", opt_ko: "韓国語",
+sens: "ページ分割感度",
+start: "処理を開始", preparing: "準備中…",
+repag: "再ページ区切り", repagTip: "既存の文字起こしを再利用し、新しい感度でページを再分割します",
+apply: "適用", dlSrt: "SRT をダウンロード", dlMd: "Markdown をダウンロード", back: "アップロードに戻る",
+noThumb: "サムネイルなし", noSpeech: "（このページに音声はありません）", pageN: "%d ページ目",
+vmeta: "ファイル：{f}｜再生時間：{d}｜言語：{l}｜全 {n} ページ",
+uploadFail: "アップロード失敗：", repagFail: "再ページ区切り失敗：",
+procFail: "処理失敗：", unknownErr: "不明なエラー", processing: "処理中",
+st_queued: "待機中", st_running: "実行中", st_done: "完了", st_error: "エラー",
+step_preparing: "準備中", step_reading: "動画情報の読み取り",
+step_detect: "スライド変化の検出", step_audio: "音声の抽出",
+step_transcribe: "音声の文字起こし", step_split: "ページ分割",
+step_thumbs: "ページサムネイル生成", step_reuse: "既存の文字起こしを再利用",
+step_pageTitles: "ページタイトル生成", step_videoTitle: "コースタイトル生成"
+}
+};
+
+const STEPS = {
+"Queued": "st_queued", "Preparing": "step_preparing",
+"Reading video info": "step_reading", "Detecting slide changes": "step_detect",
+"Extracting audio": "step_audio", "Transcribing speech": "step_transcribe",
+"Splitting pages": "step_split", "Generating page thumbnails": "step_thumbs",
+"Reusing existing transcript": "step_reuse", "Generating page titles": "step_pageTitles",
+"Generating course title": "step_videoTitle", "Done": "st_done"
+};
+
+const HTML_LANG = { en: "en", "zh-TW": "zh-Hant", "zh-CN": "zh-Hans", ja: "ja" };
+
+function detectLang() {
+  const list = navigator.languages || [navigator.language || "en"];
+  for (const raw of list) {
+    const k = String(raw).toLowerCase();
+    if (k.startsWith("zh")) return /(^|-)(tw|hk|mo|hant)/.test(k) ? "zh-TW" : "zh-CN";
+    if (k.startsWith("ja")) return "ja";
+    if (k.startsWith("en")) return "en";
+  }
+  return "en";
+}
+
+let CUR = "en";
+const t = (k) => (I18N[CUR] || I18N.en)[k] || I18N.en[k] || k;
+
+function applyLang() {
+  const saved = localStorage.getItem("ui_lang") || "auto";
+  CUR = saved === "auto" ? detectLang() : saved;
+  document.documentElement.lang = HTML_LANG[CUR] || "en";
+  document.title = t("pageTitle");
+  document.querySelectorAll("[data-i18n]").forEach((el) => {
+    el.textContent = t(el.dataset.i18n);
+  });
+  document.querySelectorAll("[data-i18n-html]").forEach((el) => {
+    el.innerHTML = t(el.dataset.i18nHtml);
+  });
+  document.querySelectorAll("[data-tip]").forEach((el) => {
+    el.title = t(el.dataset.tip);
+  });
+  $("uiLang").value = saved;
+  if (!pickedFile) $("fileInfo").textContent = t("fileInfo");
+  if (!$("result").classList.contains("hidden") && lastJob) showResult(lastJob);
+  else if (!$("progressCard").classList.contains("hidden") && lastJob) renderProg(lastJob);
+}
+
+$("uiLang").addEventListener("change", () => {
+  const v = $("uiLang").value;
+  if (v === "auto") localStorage.removeItem("ui_lang");
+  else localStorage.setItem("ui_lang", v);
+  applyLang();
+});
 
 const fmt = (s) => {
   s = Math.max(0, Math.round(s));
@@ -147,7 +316,6 @@ const fmt = (s) => {
   const p = (n) => String(n).padStart(2, "0");
   return h ? `${p(h)}:${p(m)}:${p(sec)}` : `${p(m)}:${p(sec)}`;
 };
-
 $("drop").addEventListener("click", () => $("file").click());
 $("file").addEventListener("change", () => setFile($("file").files[0]));
 for (const ev of ["dragover", "dragleave", "drop"]) {
@@ -162,7 +330,7 @@ function setFile(f) {
   $("submit").disabled = !pickedFile;
   $("fileInfo").textContent = pickedFile
     ? `${pickedFile.name} (${(pickedFile.size / 1048576).toFixed(1)} MB)`
-    : "mp4 / mkv / webm / mov and other common formats supported; a page-by-page transcript is generated automatically after upload";
+    : t("fileInfo");
 }
 $("scene").addEventListener("input", () =>
   $("sceneVal").textContent = Number($("scene").value).toFixed(3));
@@ -179,7 +347,7 @@ $("repag").addEventListener("click", async () => {
     if (!r.ok) throw new Error((await r.json()).detail || r.status);
     poll((await r.json()).id);
   } catch (e) {
-    alert("Repagination failed: " + e.message);
+    alert(t("repagFail") + e.message);
   } finally {
     $("repag").disabled = false;
   }
@@ -199,13 +367,31 @@ $("submit").addEventListener("click", async () => {
     if (!r.ok) throw new Error((await r.json()).detail || r.status);
     poll((await r.json()).id);
   } catch (e) {
-    $("upErr").textContent = "Upload failed: " + e.message;
+    $("upErr").textContent = t("uploadFail") + e.message;
     $("submit").disabled = false;
   }
 });
 
+const statusLabel = (s) =>
+  I18N[CUR]["st_" + s] || I18N.en["st_" + s] || s;
+
+function renderProg(j) {
+  if (j.status === "error") {
+    $("progStep").innerHTML = '<span class="err">' + esc(t("procFail")) +
+      esc(j.error || t("unknownErr")) + "</span>";
+    $("progFill").style.background = "var(--bad)";
+  } else {
+    const key = STEPS[j.step];
+    $("progStep").textContent = key ? t(key) : (j.step || t("processing"));
+    $("progFill").style.background = "linear-gradient(90deg,#2563eb,#5b8def)";
+  }
+  $("progFill").style.width = Math.round((j.progress || 0) * 100) + "%";
+  $("progPct").textContent = Math.round((j.progress || 0) * 100) + "%";
+}
+
 function poll(id) {
   clearTimeout(pollTimer);
+  lastJob = null;
   $("uploadCard").classList.add("hidden");
   $("progressCard").classList.remove("hidden");
   const tick = async () => {
@@ -214,21 +400,17 @@ function poll(id) {
       const r = await fetch("/api/jobs/" + id);
       j = await r.json();
     } catch (e) { pollTimer = setTimeout(tick, 1500); return; }
-    $("progStep").textContent = j.step || "Processing";
-    $("progFill").style.width = Math.round((j.progress || 0) * 100) + "%";
-    $("progPct").textContent = Math.round((j.progress || 0) * 100) + "%";
+    lastJob = j;
+    renderProg(j);
     if (j.status === "done") { showResult(j); loadHistory(); }
-    else if (j.status === "error") {
-      $("progStep").innerHTML = '<span class="err">Processing failed: ' +
-        (j.error || "Unknown error") + "</span>";
-      $("progFill").style.background = "var(--bad)";
-    } else pollTimer = setTimeout(tick, 900);
+    else if (j.status !== "error") pollTimer = setTimeout(tick, 900);
   };
   tick();
 }
 
 function showResult(j) {
   curId = j.id;
+  lastJob = j;
   const st = (j.params && j.params.scene_threshold) || 0.03;
   $("rescene").value = Math.min(0.2, Math.max(0.01, st));
   $("resceneVal").textContent = Number($("rescene").value).toFixed(3);
@@ -237,8 +419,9 @@ function showResult(j) {
   const res = j.result;
   $("vtitle").textContent = res.title || j.filename;
   $("player").src = `/api/jobs/${j.id}/video`;
-  $("vmeta").textContent =
-    `File: ${j.filename} | Duration: ${fmt(res.duration)} | Language: ${res.language} | ${res.pages.length} pages`;
+  $("vmeta").textContent = t("vmeta")
+    .replace("{f}", j.filename).replace("{d}", fmt(res.duration))
+    .replace("{l}", res.language).replace("{n}", res.pages.length);
   $("dlSrt").href = `/api/jobs/${j.id}/export.srt`;
   $("dlMd").href = `/api/jobs/${j.id}/export.md`;
   const host = $("pages");
@@ -247,14 +430,14 @@ function showResult(j) {
     const card = document.createElement("div");
     card.className = "page";
     const media = p.thumb
-      ? `<img loading="lazy" src="/api/jobs/${j.id}/thumb/${p.index}" alt="Page ${p.index}">`
-      : `<div class="noimg">No thumbnail</div>`;
+      ? `<img loading="lazy" src="/api/jobs/${j.id}/thumb/${p.index}" alt="${esc(t("pageN").replace("%d", p.index))}">`
+      : `<div class="noimg">${esc(t("noThumb"))}</div>`;
     const segs = p.segments.map((s) =>
       `<p><a class="ts" data-t="${s.start}">${fmt(s.start)}</a>${esc(s.text)}</p>`).join("");
     card.innerHTML = `${media}<div class="pbody">
-      <div class="phead"><span class="pnum">Page ${p.index}</span>
+      <div class="phead"><span class="pnum">${esc(t("pageN").replace("%d", p.index))}</span>
       <span class="ptime">${fmt(p.start)} - ${fmt(p.end)}</span><h3>${esc(p.title)}</h3></div>
-      <div class="segs">${segs || '<p class="muted">(no speech on this page)</p>'}</div></div>`;
+      <div class="segs">${segs || `<p class="muted">${esc(t("noSpeech"))}</p>`}</div></div>`;
     host.appendChild(card);
   }
   host.querySelectorAll("a.ts").forEach((a) =>
@@ -266,11 +449,12 @@ function showResult(j) {
     }));
 }
 
-const esc = (t) => t.replace(/[&<>"]/g,
+const esc = (t2) => String(t2).replace(/[&<>"]/g,
   (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
 $("back").addEventListener("click", () => {
   clearTimeout(pollTimer);
+  lastJob = null;
   $("player").pause(); $("player").src = "";
   $("result").classList.add("hidden");
   $("progressCard").classList.add("hidden");
@@ -287,7 +471,7 @@ async function loadHistory() {
     for (const it of items.slice(0, 8)) {
       const b = document.createElement("button");
       b.textContent = it.title || it.filename;
-      b.title = `${it.filename} (${it.status})`;
+      b.title = `${it.filename} (${statusLabel(it.status)})`;
       b.addEventListener("click", () => pollOpen(it.id));
       nav.appendChild(b);
     }
@@ -301,6 +485,7 @@ function pollOpen(id) {
   });
 }
 
+applyLang();
 loadHistory();
 </script>
 </body>
