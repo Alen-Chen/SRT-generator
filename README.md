@@ -13,10 +13,14 @@ clickable to seek the video; SRT / Markdown exports are available.
 2. Audio is extracted as 16 kHz mono
 3. `faster-whisper` transcribes the speech locally (GPU/CPU auto-selected; falls
    back to CPU int8 when the GPU is full)
-4. (Optional, on by default) Each page's transcript lines are sent to the LLM with
-    the surrounding page context to proofread speech-recognition mistakes
-    (homophones, split/merged words, punctuation); corrected text is saved back
-    into `segments.json` so re-pagination reuses it
+4. (Optional, on by default) Two-round LLM transcript correction:
+   - Round 1: ASR output is kept as-is as a draft transcript
+   - The draft is sent to the LLM to write a correction guide (lecture summary,
+     domain background knowledge, inferred glossary and expected ASR error
+     patterns)
+   - Round 2: the whole draft (numbered lines in batches) plus the guide are
+     sent back to the LLM to produce the corrected transcript; the draft is
+     overwritten, only the corrected version is kept and offered for download
 5. Each page's text is sent to an OpenAI-compatible `/v1/chat/completions` endpoint
    to generate per-page topic titles, an overall course title, and a bilingual
    (Chinese/English) title + summary shown in the right-hand history panel

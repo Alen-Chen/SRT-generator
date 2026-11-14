@@ -12,7 +12,7 @@ import shutil
 import threading
 import time
 import uuid
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from pathlib import Path
 
@@ -395,47 +395,81 @@ def page_title(page: dict) -> str:
     return out[:60] if out else fallback
 
 
-def correct_page(i: int, page: dict, pages: list[dict]) -> int:
-    segs = page["segments"]
-    if not segs:
-        return 0
-    prev_txt = " ".join(s["text"] for q in pages[max(i - 2, 0):i]
-                        for s in q["segments"])[-400:]
-    next_txt = " ".join(s["text"] for q in pages[i + 1:i + 3]
-                        for s in q["segments"])[:400]
-    numbered = "\n".join(f"{n}: {s['text']}" for n, s in enumerate(segs, 1))
+def correction_guide(segments: list[dict]) -> str | None:
+    draft = " ".join(s["text"] for s in segments)[:8000]
+    if not draft.strip():
+        return None
     out = chat(
-        "The numbered lines below are ASR (speech-to-text) output from one "
-        "slide of a lecture. Proofread each line: correct obvious speech "
-        "recognition errors (wrong homophones, split/merged words, missing or "
-        "wrong punctuation) so the text is fluent and consistent with the "
-        "surrounding context. Keep the original language; do not translate, "
-        "summarize or rephrase; do not change the meaning; keep exactly one "
-        "output line per input line, with the same number prefix. "
-        "Output ONLY the numbered corrected lines.\n\n"
-        f"Context BEFORE (for reference only):\n{prev_txt or '(none)'}\n\n"
-        f"Lines to correct:\n{numbered}\n\n"
-        f"Context AFTER (for reference only):\n{next_txt or '(none)'}",
-        max_tokens=max(256, min(2048, int(len(numbered) * 2.2))),
-        temperature=0.1)
-    if not out:
-        return 0
-    fixed: dict[int, str] = {}
-    for line in out.splitlines():
-        line = line.strip().lstrip("*")
-        m = re.match(r"^(\d{1,4})\s*[:：.、]\s*(.*)$", line)
-        if m and 1 <= int(m.group(1)) <= len(segs):
-            fixed.setdefault(int(m.group(1)), m.group(2).strip())
-    if len(fixed) != len(segs):
-        log.warning("Proofread page %s: got %d/%d lines, keeping original",
-                    page["index"], len(fixed), len(segs))
-        return 0
+        "The text below is a raw ASR (speech-to-text) draft transcript of a "
+        "lecture; it contains recognition errors. Write a proofreading guide "
+        "(a prompt) that another LLM will follow to correct this transcript. "
+        "Reply in the transcript's main language, under 400 words, with these "
+        "sections:\n"
+        "1. 2-3 sentence summary of the lecture topic and context\n"
+        "2. Domain background knowledge needed to understand it\n"
+        "3. Likely correct technical terms, names and glossary inferred from "
+        "context (bullet list)\n"
+        "4. Expected ASR error patterns here (wrong homophones, split/merged "
+        "words) with examples if visible\n"
+        "5. Hard rules: keep the language, one output line per input line, no "
+        "translation/summarization/rephrasing, only fix recognition errors\n"
+        "Output ONLY the guide.\n\n" + draft,
+        max_tokens=800, temperature=0.3)
+    return out.strip() if out else None
+
+
+def correct_all(segments: list[dict], guide: str,
+                progress=lambda done, total: None) -> int:
+    batches: list[list[dict]] = []
+    cur: list[dict] = []
+    size = 0
+    for s in segments:
+        cur.append(s)
+        size += len(s["text"]) + 8
+        if size >= 1500:
+            batches.append(cur)
+            cur, size = [], 0
+    if cur:
+        batches.append(cur)
     changed = 0
-    for n, s in enumerate(segs, 1):
-        new = fixed[n]
-        if new and new != s["text"]:
-            s["text"] = new
-            changed += 1
+    for bi, batch in enumerate(batches):
+        prev_txt = (" ".join(s["text"] for s in batches[bi - 1][-2:]))[-200:] if bi else ""
+        next_txt = (" ".join(s["text"] for s in batches[bi + 1][:2]))[:200] \
+            if bi + 1 < len(batches) else ""
+        numbered = "\n".join(f"{n}: {s['text']}" for n, s in enumerate(batch, 1))
+        out = chat(
+            "Below are numbered ASR transcript lines from a lecture. Using the "
+            "guide, correct the speech-recognition errors (wrong homophones, "
+            "split/merged words, missing or wrong punctuation). Keep the "
+            "original language; do not translate, summarize or rephrase; do not "
+            "change the meaning; keep exactly one output line per input line "
+            "with the same number prefix. Output ONLY the numbered corrected "
+            f"lines.\n\nGUIDE:\n{guide}\n\n"
+            f"Context BEFORE (reference only, do not output): "
+            f"{prev_txt or '(start of transcript)'}\n\n"
+            f"Lines to correct:\n{numbered}\n\n"
+            f"Context AFTER (reference only, do not output): "
+            f"{next_txt or '(end of transcript)'}",
+            max_tokens=max(256, min(4096, int(len(numbered) * 1.8))),
+            temperature=0.1)
+        progress(bi + 1, len(batches))
+        if not out:
+            continue
+        fixed: dict[int, str] = {}
+        for line in out.splitlines():
+            line = line.strip().lstrip("*")
+            m = re.match(r"^(\d{1,4})\s*[:：.、]\s*(.*)$", line)
+            if m and 1 <= int(m.group(1)) <= len(batch):
+                fixed.setdefault(int(m.group(1)), m.group(2).strip())
+        if len(fixed) != len(batch):
+            log.warning("Proofread batch %d/%d: got %d/%d lines, keeping "
+                        "original", bi + 1, len(batches), len(fixed), len(batch))
+            continue
+        for n, s in enumerate(batch, 1):
+            new = fixed[n]
+            if new and new != s["text"]:
+                s["text"] = new
+                changed += 1
     return changed
 
 
@@ -531,22 +565,23 @@ def run_job(job_id: str) -> None:
         result["merged"] = merged
         pages = result["pages"]
 
-        if job["params"].get("correct", 1):
+        if job["params"].get("correct", 1) and result["segments"]:
+            set_progress(job_id, "Proofreading transcript", 0.85)
+            guide = correction_guide(result["segments"])
             changed = 0
-            done_ct = 0
-            with ThreadPoolExecutor(max_workers=4) as pool:
-                futs = [pool.submit(correct_page, i, p, pages)
-                        for i, p in enumerate(pages)]
-                for fut in as_completed(futs):
-                    changed += fut.result()
-                    done_ct += 1
+            if guide:
+                def cb(done_ct: int, total: int) -> None:
                     set_progress(job_id, "Proofreading transcript",
-                                 0.85 + 0.07 * done_ct / max(len(pages), 1))
+                                 0.86 + 0.06 * done_ct / max(total, 1))
+                changed = correct_all(result["segments"], guide, cb)
+            else:
+                log.warning("Job %s: correction guide unavailable, keeping "
+                            "draft transcript", job_id)
             (outdir / "segments.json").write_text(
                 json.dumps({"language": result["language"],
                             "segments": result["segments"]},
                            ensure_ascii=False, indent=1), encoding="utf-8")
-            log.info("Job %s proofread: %d/%d lines changed", job_id,
+            log.info("Job %s proofread (2-round): %d/%d lines changed", job_id,
                      changed, len(result["segments"]))
 
         set_progress(job_id, "Generating page titles", 0.955)
