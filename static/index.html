@@ -1,0 +1,307 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>課程影片．逐頁文字稿</title>
+<style>
+:root{--bg:#f4f5f7;--card:#fff;--ink:#1c2733;--mut:#68783b;--line:#e3e7ec;
+--acc:#2563eb;--acc2:#eff4ff;--ok:#15803d;--bad:#b91c1c}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);
+font-family:"Noto Sans TC","PingFang TC","Microsoft JhengHei",system-ui,sans-serif;
+line-height:1.6}
+header{display:flex;align-items:center;gap:16px;flex-wrap:wrap;
+padding:14px 24px;background:#101828;color:#fff;position:sticky;top:0;z-index:5}
+header h1{font-size:18px;margin:0;font-weight:700}
+header h1 span{color:#7fb0ff}
+#history{margin-left:auto;display:flex;gap:8px;flex-wrap:wrap}
+#history button{background:#1d2b40;color:#cdd9ea;border:1px solid #33415c;
+border-radius:99px;padding:4px 12px;font-size:12px;cursor:pointer;max-width:220px;
+overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#history button:hover{background:#2a3c5c}
+main{max-width:1150px;margin:24px auto 60px;padding:0 16px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;
+padding:20px 22px;box-shadow:0 1px 3px rgba(16,24,40,.06)}
+.hidden{display:none!important}
+.drop{border:2px dashed #b9c4d4;border-radius:12px;padding:34px 20px;text-align:center;
+cursor:pointer;transition:.15s}
+.drop.over{border-color:var(--acc);background:var(--acc2)}
+.drop input[type=file]{display:none}
+.muted{color:#667085;font-size:13px}
+.opts{display:flex;gap:22px;flex-wrap:wrap;margin:16px 0;align-items:center;font-size:14px}
+.opts label{display:flex;align-items:center;gap:8px}
+select,input[type=range]{font:inherit;padding:6px 8px;border:1px solid var(--line);
+border-radius:8px;background:#fff}
+button.primary{background:var(--acc);border:0;color:#fff;font-size:15px;font-weight:600;
+padding:11px 26px;border-radius:10px;cursor:pointer}
+button.primary:disabled{background:#9db8e8;cursor:not-allowed}
+.bar{height:10px;background:#e8edf3;border-radius:99px;overflow:hidden;margin:10px 0 4px}
+#progFill{height:100%;width:0;background:linear-gradient(90deg,#2563eb,#5b8def);
+transition:width .5s}
+#progStep{font-weight:600}
+.rhead{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin:6px 2px 14px}
+.rhead h2{margin:0;font-size:20px}
+.actions{margin-left:auto;display:flex;gap:8px;align-items:center}
+.actions a,.actions button{font-size:13px;padding:7px 14px;border-radius:8px;
+text-decoration:none;border:1px solid var(--line);background:#fff;color:var(--ink);cursor:pointer}
+.actions a.dl{border-color:var(--acc);color:var(--acc)}
+.layout{display:grid;grid-template-columns:minmax(320px,5fr) minmax(380px,7fr);gap:18px}
+@media(max-width:900px){.layout{grid-template-columns:1fr}}
+.vwrap{position:sticky;top:70px;align-self:start}
+video{width:100%;border-radius:12px;background:#000;max-height:340px}
+#vmeta{font-size:13px;color:#667085;margin-top:6px}
+#pages{display:flex;flex-direction:column;gap:14px}
+.page{display:grid;grid-template-columns:180px 1fr;gap:14px;background:var(--card);
+border:1px solid var(--line);border-radius:12px;padding:12px}
+@media(max-width:560px){.page{grid-template-columns:1fr}}
+.page img{width:100%;border-radius:8px;aspect-ratio:16/10;object-fit:cover;background:#0b1220}
+.page .noimg{width:100%;border-radius:8px;aspect-ratio:16/10;background:#dfe5ec;
+display:flex;align-items:center;justify-content:center;color:#8a94a6;font-size:13px}
+.phead .pnum{display:inline-block;background:var(--acc2);color:var(--acc);font-size:12px;
+font-weight:700;padding:2px 10px;border-radius:99px}
+.phead .ptime{font-size:12px;color:#667085;margin-left:8px}
+.phead h3{margin:6px 0 8px;font-size:16px}
+.segs p{margin:4px 0;font-size:14.5px}
+a.ts{font-family:ui-monospace,monospace;font-size:12px;color:var(--acc);cursor:pointer;
+text-decoration:none;border-bottom:1px dashed #b6cdf5;margin-right:6px}
+a.ts:hover{color:#1e40af}
+.err{color:var(--bad);font-weight:600}
+.rerip{display:flex;align-items:center;gap:6px;font-size:13px;
+border-left:1px solid var(--line);padding-left:12px}
+.rerip input[type=range]{width:110px}
+</style>
+</head>
+<body>
+<header>
+  <h1>課程影片．<span>逐頁文字稿</span></h1>
+  <nav id="history"></nav>
+</header>
+<main>
+  <section id="uploadCard" class="card">
+    <div class="drop" id="drop">
+      <p><b>拖曳課程影片到此處</b>，或點擊選擇檔案</p>
+      <p class="muted" id="fileInfo">支援 mp4 / mkv / webm / mov 等常見格式，上傳後自動產出逐頁文字稿</p>
+      <input type="file" id="file" accept="video/*,.mkv,.ts">
+    </div>
+    <div class="opts">
+      <label>轉錄模型
+        <select id="model">
+          <option value="small" selected>small（建議）</option>
+          <option value="base">base（較快）</option>
+          <option value="tiny">tiny（最快）</option>
+          <option value="medium">medium（較準）</option>
+          <option value="large-v3-turbo">large-v3-turbo</option>
+          <option value="large-v3">large-v3（最準、較慢）</option>
+        </select></label>
+      <label>語言
+        <select id="lang">
+          <option value="auto" selected>自動偵測</option>
+          <option value="zh">中文</option>
+          <option value="en">英文</option>
+          <option value="ja">日文</option>
+          <option value="ko">韓文</option>
+        </select></label>
+      <label>分頁敏感度
+        <input type="range" id="scene" min="0.01" max="0.2" step="0.005" value="0.03">
+        <span id="sceneVal">0.030</span></label>
+    </div>
+    <button class="primary" id="submit" disabled>開始處理</button>
+    <p class="muted" id="upErr"></p>
+  </section>
+
+  <section id="progressCard" class="card hidden" style="margin-top:18px">
+    <div id="progStep">準備中…</div>
+    <div class="bar"><div id="progFill"></div></div>
+    <div class="muted"><span id="progPct">0%</span> <span id="progNote"></span></div>
+  </section>
+
+  <section id="result" class="hidden" style="margin-top:18px">
+    <div class="rhead">
+      <h2 id="vtitle"></h2>
+      <div class="actions">
+        <span class="rerip">重新分頁 <input type="range" id="rescene" min="0.01" max="0.2" step="0.005" value="0.03">
+          <span id="resceneVal" class="muted">0.030</span>
+          <button id="repag" title="沿用轉錄結果，依新敏感度重新切頁">套用</button></span>
+        <a class="dl" id="dlSrt" href="#">下載 SRT</a>
+        <a class="dl" id="dlMd" href="#">下載 Markdown</a>
+        <button id="back">回到上傳</button>
+      </div>
+    </div>
+    <div class="layout">
+      <div class="vwrap">
+        <video id="player" controls preload="metadata"></video>
+        <div id="vmeta"></div>
+      </div>
+      <div id="pages"></div>
+    </div>
+  </section>
+</main>
+<script>
+const $ = (id) => document.getElementById(id);
+let pickedFile = null, pollTimer = null, curId = null;
+
+const fmt = (s) => {
+  s = Math.max(0, Math.round(s));
+  const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), sec = s % 60;
+  const p = (n) => String(n).padStart(2, "0");
+  return h ? `${p(h)}:${p(m)}:${p(sec)}` : `${p(m)}:${p(sec)}`;
+};
+
+$("drop").addEventListener("click", () => $("file").click());
+$("file").addEventListener("change", () => setFile($("file").files[0]));
+for (const ev of ["dragover", "dragleave", "drop"]) {
+  $("drop").addEventListener(ev, (e) => {
+    e.preventDefault();
+    $("drop").classList.toggle("over", ev === "dragover");
+    if (ev === "drop") setFile(e.dataTransfer.files[0]);
+  });
+}
+function setFile(f) {
+  pickedFile = f || null;
+  $("submit").disabled = !pickedFile;
+  $("fileInfo").textContent = pickedFile
+    ? `${pickedFile.name}（${(pickedFile.size / 1048576).toFixed(1)} MB）`
+    : "支援 mp4 / mkv / webm / mov 等常見格式，上傳後自動產出逐頁文字稿";
+}
+$("scene").addEventListener("input", () =>
+  $("sceneVal").textContent = Number($("scene").value).toFixed(3));
+$("rescene").addEventListener("input", () =>
+  $("resceneVal").textContent = Number($("rescene").value).toFixed(3));
+$("repag").addEventListener("click", async () => {
+  if (!curId) return;
+  $("repag").disabled = true;
+  const fd = new FormData();
+  fd.append("reuse_from", curId);
+  fd.append("scene_threshold", $("rescene").value);
+  try {
+    const r = await fetch("/api/jobs", { method: "POST", body: fd });
+    if (!r.ok) throw new Error((await r.json()).detail || r.status);
+    poll((await r.json()).id);
+  } catch (e) {
+    alert("重新分頁失敗：" + e.message);
+  } finally {
+    $("repag").disabled = false;
+  }
+});
+
+$("submit").addEventListener("click", async () => {
+  if (!pickedFile) return;
+  $("submit").disabled = true;
+  $("upErr").textContent = "";
+  const fd = new FormData();
+  fd.append("file", pickedFile);
+  fd.append("model", $("model").value);
+  fd.append("language", $("lang").value);
+  fd.append("scene_threshold", $("scene").value);
+  try {
+    const r = await fetch("/api/jobs", { method: "POST", body: fd });
+    if (!r.ok) throw new Error((await r.json()).detail || r.status);
+    poll((await r.json()).id);
+  } catch (e) {
+    $("upErr").textContent = "上傳失敗：" + e.message;
+    $("submit").disabled = false;
+  }
+});
+
+function poll(id) {
+  clearTimeout(pollTimer);
+  $("uploadCard").classList.add("hidden");
+  $("progressCard").classList.remove("hidden");
+  const tick = async () => {
+    let j;
+    try {
+      const r = await fetch("/api/jobs/" + id);
+      j = await r.json();
+    } catch (e) { pollTimer = setTimeout(tick, 1500); return; }
+    $("progStep").textContent = j.step || "處理中";
+    $("progFill").style.width = Math.round((j.progress || 0) * 100) + "%";
+    $("progPct").textContent = Math.round((j.progress || 0) * 100) + "%";
+    if (j.status === "done") { showResult(j); loadHistory(); }
+    else if (j.status === "error") {
+      $("progStep").innerHTML = '<span class="err">處理失敗：' +
+        (j.error || "未知錯誤") + "</span>";
+      $("progFill").style.background = "var(--bad)";
+    } else pollTimer = setTimeout(tick, 900);
+  };
+  tick();
+}
+
+function showResult(j) {
+  curId = j.id;
+  const st = (j.params && j.params.scene_threshold) || 0.03;
+  $("rescene").value = Math.min(0.2, Math.max(0.01, st));
+  $("resceneVal").textContent = Number($("rescene").value).toFixed(3);
+  $("progressCard").classList.add("hidden");
+  $("result").classList.remove("hidden");
+  const res = j.result;
+  $("vtitle").textContent = res.title || j.filename;
+  $("player").src = `/api/jobs/${j.id}/video`;
+  $("vmeta").textContent =
+    `檔案：${j.filename}｜長度：${fmt(res.duration)}｜語言：${res.language}｜共 ${res.pages.length} 頁`;
+  $("dlSrt").href = `/api/jobs/${j.id}/export.srt`;
+  $("dlMd").href = `/api/jobs/${j.id}/export.md`;
+  const host = $("pages");
+  host.innerHTML = "";
+  for (const p of res.pages) {
+    const card = document.createElement("div");
+    card.className = "page";
+    const media = p.thumb
+      ? `<img loading="lazy" src="/api/jobs/${j.id}/thumb/${p.index}" alt="第${p.index}頁">`
+      : `<div class="noimg">無縮圖</div>`;
+    const segs = p.segments.map((s) =>
+      `<p><a class="ts" data-t="${s.start}">${fmt(s.start)}</a>${esc(s.text)}</p>`).join("");
+    card.innerHTML = `${media}<div class="pbody">
+      <div class="phead"><span class="pnum">第 ${p.index} 頁</span>
+      <span class="ptime">${fmt(p.start)} – ${fmt(p.end)}</span><h3>${esc(p.title)}</h3></div>
+      <div class="segs">${segs || '<p class="muted">（此頁無語音）</p>'}</div></div>`;
+    host.appendChild(card);
+  }
+  host.querySelectorAll("a.ts").forEach((a) =>
+    a.addEventListener("click", () => {
+      const v = $("player");
+      v.currentTime = Number(a.dataset.t);
+      v.play();
+      v.scrollIntoView({ behavior: "smooth", block: "center" });
+    }));
+}
+
+const esc = (t) => t.replace(/[&<>"]/g,
+  (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+$("back").addEventListener("click", () => {
+  clearTimeout(pollTimer);
+  $("player").pause(); $("player").src = "";
+  $("result").classList.add("hidden");
+  $("progressCard").classList.add("hidden");
+  $("uploadCard").classList.remove("hidden");
+  $("submit").disabled = !pickedFile;
+  loadHistory();
+});
+
+async function loadHistory() {
+  try {
+    const items = await (await fetch("/api/jobs")).json();
+    const nav = $("history");
+    nav.innerHTML = "";
+    for (const it of items.slice(0, 8)) {
+      const b = document.createElement("button");
+      b.textContent = it.title || it.filename;
+      b.title = it.filename + "（" + it.status + "）";
+      b.addEventListener("click", () => pollOpen(it.id));
+      nav.appendChild(b);
+    }
+  } catch (e) { /* ignore */ }
+}
+
+function pollOpen(id) {
+  clearTimeout(pollTimer);
+  fetch("/api/jobs/" + id).then((r) => r.json()).then((j) => {
+    if (j.status === "done") showResult(j); else poll(id);
+  });
+}
+
+loadHistory();
+</script>
+</body>
+</html>
