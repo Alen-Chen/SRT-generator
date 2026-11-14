@@ -40,6 +40,11 @@ main>section{grid-column:1}
  margin-top:6px;font-size:11px;color:#94a3b8}
 .htog{background:none;border:none;color:#2563eb;font:inherit;font-size:11.5px;
  cursor:pointer;padding:0;white-space:nowrap}
+.hacts{display:flex;gap:10px;align-items:center;flex:none}
+.hdel{background:none;border:none;color:#b91c1c;font:inherit;font-size:11.5px;
+ cursor:pointer;padding:0;white-space:nowrap}
+.hdel:hover{text-decoration:underline}
+.hdel:disabled{color:#94a3b8;cursor:default;text-decoration:none}
 .card{background:var(--card);border:1px solid var(--line);border-radius:14px;
 padding:20px 22px;box-shadow:0 1px 3px rgba(16,24,40,.06)}
 .hidden{display:none!important}
@@ -270,6 +275,9 @@ uploadFail: "Upload failed: ", repagFail: "Repagination failed: ",
 uploading: "Uploading video", uploadDone: "Upload complete, starting job…",
 netErr: "Network error",
 historyTitle: "History", expand: "Show more", collapse: "Show less",
+delBtn: "Delete",
+delFail: "Delete failed",
+delConfirm: "Delete “{n}”? The video and all subtitle files of this record will be permanently removed.",
 procFail: "Processing failed: ", unknownErr: "Unknown error", processing: "Processing",
 st_queued: "Queued", st_running: "Running", st_done: "Done", st_error: "Error",
 step_preparing: "Preparing", step_reading: "Reading video info",
@@ -312,6 +320,9 @@ uploadFail: "上傳失敗：", repagFail: "重新分頁失敗：",
 uploading: "上傳影片中", uploadDone: "上傳完成，開始處理…",
 netErr: "網路錯誤",
 historyTitle: "使用歷史", expand: "展開", collapse: "收起",
+delBtn: "刪除",
+delFail: "刪除失敗",
+delConfirm: "刪除「{n}」？此紀錄的影片與所有字幕檔將永久移除，無法復原。",
 procFail: "處理失敗：", unknownErr: "未知錯誤", processing: "處理中",
 st_queued: "排隊中", st_running: "執行中", st_done: "完成", st_error: "錯誤",
 step_preparing: "準備中", step_reading: "讀取影片資訊",
@@ -354,6 +365,9 @@ uploadFail: "上传失败：", repagFail: "重新分页失败：",
 uploading: "上传视频中", uploadDone: "上传完成，开始处理…",
 netErr: "网络错误",
 historyTitle: "使用历史", expand: "展开", collapse: "收起",
+delBtn: "删除",
+delFail: "删除失败",
+delConfirm: "删除「{n}」？此纪录的视频与所有字幕文件将被永久移除，无法恢复。",
 procFail: "处理失败：", unknownErr: "未知错误", processing: "处理中",
 st_queued: "排队中", st_running: "运行中", st_done: "完成", st_error: "错误",
 step_preparing: "准备中", step_reading: "读取视频信息",
@@ -396,6 +410,9 @@ uploadFail: "アップロード失敗：", repagFail: "再ページ区切り失�
 uploading: "動画をアップロード中", uploadDone: "アップロード完了、処理を開始…",
 netErr: "ネットワークエラー",
 historyTitle: "履歴", expand: "開く", collapse: "閉じる",
+delBtn: "削除",
+delFail: "削除に失敗しました",
+delConfirm: "「{n}」を削除しますか？この記録の動画とすべての字幕ファイルが完全に削除され、元に戻せません。",
 procFail: "処理失敗：", unknownErr: "不明なエラー", processing: "処理中",
 st_queued: "待機中", st_running: "実行中", st_done: "完了", st_error: "エラー",
 step_preparing: "準備中", step_reading: "動画情報の読み取り",
@@ -749,14 +766,19 @@ function showResult(j) {
 const esc = (t2) => String(t2).replace(/[&<>"]/g,
   (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
-$("back").addEventListener("click", () => {
+function resetView() {
   clearTimeout(pollTimer);
   lastJob = null;
+  curId = null;
   $("player").pause(); $("player").src = "";
   $("result").classList.add("hidden");
   $("progressCard").classList.add("hidden");
   $("uploadCard").classList.remove("hidden");
   $("submit").disabled = pickedFiles.length === 0;
+}
+
+$("back").addEventListener("click", () => {
+  resetView();
   loadHistory();
 });
 
@@ -782,16 +804,20 @@ async function loadHistory() {
       const own = ME && ME.role === "admin" && it.owner ? " · " + esc(it.owner) : "";
       const foot = esc(it.filename) + " · " + esc(statusLabel(it.status)) + own +
         (it.pages ? " · " + it.pages + "p" : "");
+      const htitle = (m && m.title_zh) || it.title || it.filename;
+      const canDel = it.status === "done" || it.status === "error";
       let inner = `<div class="hdate">${esc(fmtDate(it.created_at))}</div>`;
-      inner += `<div class="ht1">${esc((m && m.title_zh) || it.title || it.filename)}</div>`;
+      inner += `<div class="ht1">${esc(htitle)}</div>`;
       if (m && m.title_en) inner += `<div class="ht2">${esc(m.title_en)}</div>`;
       if (m && (m.summary_zh || m.summary_en)) {
         inner += `<div class="hsum"><span class="szh">${esc(m.summary_zh || "")}</span>` +
           `<span class="sen">${esc(m.summary_en || "")}</span></div>`;
       }
-      inner += `<div class="hfoot"><span>${foot}</span>` +
+      inner += `<div class="hfoot"><span>${foot}</span><span class="hacts">` +
         ((m && (m.summary_zh || m.summary_en))
-          ? `<button class="htog" data-i18n="expand"></button>` : "") + `</div>`;
+          ? `<button class="htog" data-i18n="expand"></button>` : "") +
+        (canDel ? `<button class="hdel" data-i18n="delBtn"></button>` : "") +
+        `</span></div>`;
       card.innerHTML = inner;
       card.addEventListener("click", () => pollOpen(it.id));
       const tog = card.querySelector(".htog");
@@ -801,6 +827,25 @@ async function loadHistory() {
           e.stopPropagation();
           const open = card.classList.toggle("open");
           tog.textContent = t(open ? "collapse" : "expand");
+        });
+      }
+      const del = card.querySelector(".hdel");
+      if (del) {
+        del.textContent = t("delBtn");
+        del.addEventListener("click", (e) => {
+          e.stopPropagation();
+          if (!confirm(t("delConfirm").replace("{n}", htitle))) return;
+          del.disabled = true;
+          api("/api/jobs/" + it.id, { method: "DELETE" }).then((r) => {
+            if (!r.ok) {
+              return r.json().then((d) => {
+                del.disabled = false;
+                alert((d && d.detail) || t("delFail"));
+              });
+            }
+            if (curId === it.id) resetView();
+            loadHistory();
+          }).catch(() => { del.disabled = false; });
         });
       }
       if (it.status === "done" && !m && !metaBusy.has(it.id)) {

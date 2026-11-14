@@ -726,6 +726,29 @@ def job_status(job_id: str, request: Request) -> JSONResponse:
     return JSONResponse(get_job_access(job_id, require_user(request)))
 
 
+@app.delete("/api/jobs/{job_id}")
+def delete_job(job_id: str, request: Request) -> JSONResponse:
+    user = require_user(request)
+    job = get_job_access(job_id, user)
+    if job["status"] in ("queued", "running"):
+        raise HTTPException(409, "Job is still running")
+    removed = 0
+    owned = sorted(UPLOADS.glob(f"{job_id}.*"))
+    owned += sorted(UPLOADS.glob(f"{job_id}_p[0-9][0-9].*"))
+    for vf in owned:
+        try:
+            vf.unlink()
+            removed += 1
+        except OSError:
+            log.exception("Failed to delete video file: %s", vf)
+    shutil.rmtree(JOBS / job_id, ignore_errors=True)
+    with jobs_lock:
+        jobs.pop(job_id, None)
+    log.info("User %s deleted job %s (%d video file(s))",
+             user["username"], job_id, removed)
+    return JSONResponse({"ok": True, "videos": removed})
+
+
 @app.post("/api/jobs/{job_id}/meta")
 def gen_job_meta(job_id: str, request: Request) -> JSONResponse:
     job = get_job_access(job_id, require_user(request))

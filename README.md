@@ -90,7 +90,10 @@ Environment variables override the config file:
   Administrators can also disable accounts and promote/demote roles
   (self-deactivation and self-demotion are blocked).
 - Each user only sees their own job history, videos and exports; administrators
-  see everything and can open any job.
+  see everything and can open any job. Any listed record can be deleted (History
+  panel → Delete): the job entry, its uploaded/merged videos and all generated
+  subtitle/transcript files are removed permanently. Jobs still queued or
+  running cannot be deleted. Videos shared via re-use stay with their source job.
 - Uploaded originals are kept per user (`data/uploads/`); when several parts
   are merged, only the merged file is kept. Generated subtitles
   (`full.srt`) and the Markdown transcript are stored under `data/jobs/{id}/`.
