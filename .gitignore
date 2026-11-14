@@ -3,5 +3,7 @@ data/
 __pycache__/
 *.pyc
 server.log
+# local secrets: copy config.example.json -> config.json
+config.json
 # test videos are too large for git
 test_pattern/

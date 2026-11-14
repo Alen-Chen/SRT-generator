@@ -30,9 +30,32 @@ JOBS = DATA / "jobs"
 for d in (UPLOADS, JOBS):
     d.mkdir(parents=True, exist_ok=True)
 
-OPENAI_BASE_URL = os.environ.get("OPENAI_BASE_URL", "http://127.0.0.1:8000/v1").rstrip("/")
-OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "REDACTED")
-LLM_MODEL = os.environ.get("LLM_MODEL", "")
+CONFIG_PATH = Path(os.environ.get("SG_CONFIG", BASE / "config.json"))
+
+
+def load_config() -> dict:
+    cfg = {}
+    if CONFIG_PATH.exists():
+        try:
+            cfg = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
+        except Exception:  # noqa: BLE001
+            log.exception("Failed to parse config file: %s", CONFIG_PATH)
+    else:
+        log.warning("Config file not found: %s (see config.example.json)", CONFIG_PATH)
+    return {
+        "base_url": os.environ.get("OPENAI_BASE_URL") or cfg.get("base_url")
+        or "http://127.0.0.1:8000/v1",
+        "api_key": os.environ.get("OPENAI_API_KEY") or cfg.get("api_key") or "",
+        "model": os.environ.get("LLM_MODEL") or cfg.get("llm_model") or "",
+    }
+
+
+_cfg = load_config()
+OPENAI_BASE_URL = str(_cfg["base_url"]).rstrip("/")
+OPENAI_API_KEY = _cfg["api_key"]
+LLM_MODEL = _cfg["model"]
+if not OPENAI_API_KEY:
+    log.warning("No API key configured: LLM titles will fall back to plain text")
 DEFAULT_WHISPER = os.environ.get("WHISPER_MODEL", "small")
 VIDEO_EXTS = {".mp4", ".mkv", ".webm", ".mov", ".avi", ".flv", ".m4v", ".ts", ".mpg", ".mpeg", ".wmv"}
 

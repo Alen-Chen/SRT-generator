@@ -26,18 +26,33 @@ The "Repaginate" control on the result page reuses an existing transcript
 ```bash
 python3 -m venv .venv
 .venv/bin/pip install -r requirements.txt
+cp config.example.json config.json   # then edit api_key
 .venv/bin/uvicorn app:app --host 0.0.0.0 --port 8080
 ```
 
 Open <http://127.0.0.1:8080> and drag a video in.
 
-## Environment variables
+## Configuration
+
+Copy `config.example.json` to `config.json` and fill in your API credentials.
+`config.json` is gitignored and holds the secret API key; never commit it.
+
+```json
+{
+  "base_url": "http://127.0.0.1:8000/v1",
+  "api_key": "<your-api-key>",
+  "llm_model": ""
+}
+```
+
+If the API key is missing, the app still works but titles fall back to plain text.
+
+Environment variables override the config file:
 
 | Variable | Default | Description |
 |---|---|---|
-| `OPENAI_BASE_URL` | `http://127.0.0.1:8000/v1` | OpenAI-compatible endpoint |
-| `OPENAI_API_KEY` | `sk-strata-...` | API key |
-| `LLM_MODEL` | first id from `/v1/models` | model used for titles |
+| `SG_CONFIG` | `./config.json` | config file path |
+| `OPENAI_BASE_URL` / `OPENAI_API_KEY` / `LLM_MODEL` | from config file | OpenAI-compatible endpoint / key / title model (default: first id from `/v1/models`) |
 | `WHISPER_MODEL` | `small` | default transcription model |
 | `WHISPER_DEVICE` / `WHISPER_COMPUTE` | auto / int8_float16→cpu int8 | force transcription device |
 | `SG_DATA_DIR` | `./data` | uploads and results directory |
