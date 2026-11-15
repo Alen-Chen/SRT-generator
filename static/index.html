@@ -45,6 +45,10 @@ main>section{grid-column:1}
  cursor:pointer;padding:0;white-space:nowrap}
 .hdel:hover{text-decoration:underline}
 .hdel:disabled{color:#94a3b8;cursor:default;text-decoration:none}
+.hresume{background:none;border:none;color:var(--acc);font:inherit;font-size:11.5px;
+  cursor:pointer;padding:0;white-space:nowrap}
+.hresume:hover{text-decoration:underline}
+.hresume:disabled{color:#94a3b8;cursor:default;text-decoration:none}
 .card{background:var(--card);border:1px solid var(--line);border-radius:14px;
 padding:20px 22px;box-shadow:0 1px 3px rgba(16,24,40,.06)}
 .hidden{display:none!important}
@@ -207,6 +211,17 @@ border-radius:8px;background:var(--acc2);color:var(--acc);cursor:pointer}
         <span data-i18n="correctOpt"></span></label>
       <label><input type="checkbox" id="smartcut">
         <span data-i18n="cutOpt"></span></label>
+      <label><input type="checkbox" id="notes">
+        <span data-i18n="notesOpt"></span></label>
+      <label class="hidden" id="notesLangWrap"><span data-i18n="notesLang"></span>
+        <select id="notesLang">
+          <option value="" selected data-i18n="notesLangPick"></option>
+          <option value="auto" data-i18n="nlang_auto"></option>
+          <option value="en" data-i18n="nlang_en"></option>
+          <option value="zh-Hans" data-i18n="nlang_zhHans"></option>
+          <option value="zh-Hant" data-i18n="nlang_zhHant"></option>
+          <option value="ja" data-i18n="nlang_ja"></option>
+        </select></label>
     </div>
     <button class="primary" id="submit" disabled data-i18n="start"></button>
     <p class="muted" id="upErr"></p>
@@ -228,6 +243,11 @@ border-radius:8px;background:var(--acc2);color:var(--acc);cursor:pointer}
         <a class="dl hidden" id="dlVideo" href="#" data-i18n="dlVideo"></a>
         <a class="dl" id="dlSrt" href="#" data-i18n="dlSrt"></a>
         <a class="dl" id="dlMd" href="#" data-i18n="dlMd"></a>
+        <span class="rerip hidden" id="notesCtl">
+          <button id="retryNotes" class="hidden" data-i18n="retryNotes"></button>
+          <a class="dl hidden" id="dlNotes" href="#" data-i18n="dlNotes"></a>
+          <span id="notesState" class="muted"></span>
+        </span>
         <button id="back" data-i18n="back"></button>
       </div>
     </div>
@@ -285,6 +305,8 @@ delFail: "Delete failed",
 delConfirm: "Delete “{n}”? The video and all subtitle files of this record will be permanently removed.",
 procFail: "Processing failed: ", unknownErr: "Unknown error", processing: "Processing",
 st_queued: "Queued", st_running: "Running", st_done: "Done", st_error: "Error",
+st_interrupted: "Interrupted", resumeBtn: "Resume",
+step_resume: "Resuming from the saved checkpoint",
 step_preparing: "Preparing", step_reading: "Reading video info",
 step_detect: "Detecting slide changes", step_audio: "Extracting audio",
 step_transcribe: "Transcribing speech", step_split: "Splitting pages",
@@ -292,6 +314,14 @@ step_thumbs: "Generating page thumbnails", step_reuse: "Reusing existing transcr
 step_proofread: "AI-proofreading transcript",
 step_cut: "Smart-cutting video",
 step_pageTitles: "Generating page titles", step_videoTitle: "Generating course title",
+step_notes: "Generating class notes",
+notesOpt: "Auto-generate class notes (PDF)", notesLang: "Notes language",
+nlang_auto: "Same as speech", nlang_en: "English", nlang_zhHans: "简体中文",
+nlang_zhHant: "繁體中文", nlang_ja: "日本語",
+notesLangPick: "(select language)", retryNotes: "Retry notes",
+notesLangRequired: "Please choose the notes language before starting.",
+dlNotes: "Download notes PDF", notesGenerating: "Generating class notes…",
+notesReady: "Notes ready", notesFail: "Notes generation failed: ",
 authTitle: "Sign in to continue", username: "Username", password: "Password",
 signIn: "Sign in", signUp: "Register", signOut: "Sign out",
 firstNote: "The first registered account becomes the administrator; later registrations must be approved by an administrator before signing in.",
@@ -333,6 +363,8 @@ delFail: "刪除失敗",
 delConfirm: "刪除「{n}」？此紀錄的影片與所有字幕檔將永久移除，無法復原。",
 procFail: "處理失敗：", unknownErr: "未知錯誤", processing: "處理中",
 st_queued: "排隊中", st_running: "執行中", st_done: "完成", st_error: "錯誤",
+st_interrupted: "已中斷", resumeBtn: "繼續處理",
+step_resume: "從已保存的檢查點繼續",
 step_preparing: "準備中", step_reading: "讀取影片資訊",
 step_detect: "偵測頁面切換", step_audio: "擷取音軌",
 step_transcribe: "語音轉錄", step_split: "切分頁面",
@@ -340,6 +372,14 @@ step_thumbs: "產生頁面縮圖", step_reuse: "沿用既有轉錄",
 step_proofread: "AI 校正轉錄文字",
 step_cut: "智慧剪除靜音片段",
 step_pageTitles: "生成頁面標題", step_videoTitle: "生成課程標題",
+step_notes: "產生課堂筆記",
+notesOpt: "自動產生課堂筆記（PDF）", notesLang: "筆記語言",
+nlang_auto: "跟隨語音語言", nlang_en: "English", nlang_zhHans: "简体中文",
+nlang_zhHant: "繁體中文", nlang_ja: "日本語",
+notesLangPick: "（選擇語言）", retryNotes: "重試產生筆記",
+notesLangRequired: "開始處理前請先選擇筆記語言。",
+dlNotes: "下載筆記 PDF", notesGenerating: "筆記產生中…",
+notesReady: "筆記已就緒", notesFail: "筆記產生失敗：",
 authTitle: "登入以繼續", username: "帳號", password: "密碼",
 signIn: "登入", signUp: "註冊", signOut: "登出",
 firstNote: "第一個註冊的帳號自動成為管理員；之後註冊的帳號需經管理員核准後才能登入。",
@@ -381,6 +421,8 @@ delFail: "删除失败",
 delConfirm: "删除「{n}」？此纪录的视频与所有字幕文件将被永久移除，无法恢复。",
 procFail: "处理失败：", unknownErr: "未知错误", processing: "处理中",
 st_queued: "排队中", st_running: "运行中", st_done: "完成", st_error: "错误",
+st_interrupted: "已中断", resumeBtn: "继续处理",
+step_resume: "从已保存的检查点继续",
 step_preparing: "准备中", step_reading: "读取视频信息",
 step_detect: "检测页面切换", step_audio: "提取音频",
 step_transcribe: "语音转录", step_split: "切分页面",
@@ -388,6 +430,14 @@ step_thumbs: "生成页面缩图", step_reuse: "复用已有转录",
 step_proofread: "AI 校正转录文字",
 step_cut: "智能剪辑静音片段",
 step_pageTitles: "生成页面标题", step_videoTitle: "生成课程标题",
+step_notes: "生成课堂笔记",
+notesOpt: "自动生成课堂笔记（PDF）", notesLang: "笔记语言",
+nlang_auto: "跟随语音语言", nlang_en: "English", nlang_zhHans: "简体中文",
+nlang_zhHant: "繁體中文", nlang_ja: "日本語",
+notesLangPick: "（选择语言）", retryNotes: "重试生成笔记",
+notesLangRequired: "开始处理前请先选择笔记语言。",
+dlNotes: "下载笔记 PDF", notesGenerating: "笔记生成中…",
+notesReady: "笔记已就绪", notesFail: "笔记生成失败：",
 authTitle: "登录以继续", username: "账号", password: "密码",
 signIn: "登录", signUp: "注册", signOut: "退出",
 firstNote: "第一个注册的账号自动成为管理员；之后注册的账号需经管理员批准后才能登录。",
@@ -429,6 +479,8 @@ delFail: "削除に失敗しました",
 delConfirm: "「{n}」を削除しますか？この記録の動画とすべての字幕ファイルが完全に削除され、元に戻せません。",
 procFail: "処理失敗：", unknownErr: "不明なエラー", processing: "処理中",
 st_queued: "待機中", st_running: "実行中", st_done: "完了", st_error: "エラー",
+st_interrupted: "中断", resumeBtn: "再開",
+step_resume: "保存されたチェックポイントから再開",
 step_preparing: "準備中", step_reading: "動画情報の読み取り",
 step_detect: "スライド変化の検出", step_audio: "音声の抽出",
 step_transcribe: "音声の文字起こし", step_split: "ページ分割",
@@ -436,6 +488,14 @@ step_thumbs: "ページサムネイル生成", step_reuse: "既存の文字起�
 step_proofread: "AI で文字起こし校正",
 step_cut: "無音部分をスマートカット",
 step_pageTitles: "ページタイトル生成", step_videoTitle: "コースタイトル生成",
+step_notes: "授業ノート生成",
+notesOpt: "授業ノートを自動生成（PDF）", notesLang: "ノートの言語",
+nlang_auto: "音声言語に合わせる", nlang_en: "English", nlang_zhHans: "简体中文",
+nlang_zhHant: "繁體中文", nlang_ja: "日本語",
+notesLangPick: "（言語を選択）", retryNotes: "ノートを再試行",
+notesLangRequired: "処理開始前にノートの言語を選択してください。",
+dlNotes: "ノート PDF をダウンロード", notesGenerating: "ノートを生成中…",
+notesReady: "ノート完成", notesFail: "ノート生成失敗：",
 authTitle: "ログインしてください", username: "ユーザー名", password: "パスワード",
 signIn: "ログイン", signUp: "登録", signOut: "ログアウト",
 firstNote: "最初に登録したアカウントが管理者になります。以降の登録は管理者の承認後にログインできます。",
@@ -455,9 +515,10 @@ const STEPS = {
 "Extracting audio": "step_audio", "Transcribing speech": "step_transcribe",
 "Splitting pages": "step_split", "Generating page thumbnails": "step_thumbs",
 "Reusing existing transcript": "step_reuse", "Proofreading transcript": "step_proofread",
-"Smart cutting video": "step_cut",
+"Smart cutting video": "step_cut", "Resuming transcript": "step_resume",
 "Generating page titles": "step_pageTitles",
-"Generating course title": "step_videoTitle", "Done": "st_done"
+"Generating course title": "step_videoTitle",
+"Generating class notes": "step_notes", "Done": "st_done"
 };
 
 const HTML_LANG = { en: "en", "zh-TW": "zh-Hant", "zh-CN": "zh-Hans", ja: "ja" };
@@ -617,10 +678,66 @@ function renderFileList() {
   } else {
     $("fileInfo").textContent = t("fileInfo");
   }
-  $("submit").disabled = n === 0;
+  updateSubmitState();
 }
 $("scene").addEventListener("input", () =>
   $("sceneVal").textContent = Number($("scene").value).toFixed(3));
+$("notes").addEventListener("change", () => {
+  $("notesLangWrap").classList.toggle("hidden", !$("notes").checked);
+  updateSubmitState();
+});
+$("notesLang").addEventListener("change", updateSubmitState);
+function updateSubmitState() {
+  $("submit").disabled = pickedFiles.length === 0 ||
+    ($("notes").checked && $("notesLang").value === "");
+}
+let notesTimer = null;
+function renderNotesUI(j) {
+  const n = (j.result && j.result.notes) || null;
+  const ctl = $("notesCtl"), st = $("notesState"), dl = $("dlNotes");
+  const rt = $("retryNotes");
+  dl.classList.add("hidden");
+  rt.classList.add("hidden");
+  st.textContent = "";
+  ctl.classList.toggle("hidden", !n);
+  if (!n) return;
+  if (n.status === "done") {
+    dl.href = `/api/jobs/${j.id}/notes.pdf`;
+    dl.classList.remove("hidden");
+    st.textContent = t("notesReady");
+  } else if (n.status === "running") {
+    st.textContent = t("notesGenerating");
+    clearTimeout(notesTimer);
+    notesTimer = setTimeout(() => {
+      if (curId !== j.id) return;
+      api("/api/jobs/" + j.id).then((r) => r.json()).then((jj) => {
+        lastJob = jj;
+        renderNotesUI(jj);
+        if (((jj.result || {}).notes || {}).status === "running") pollNotes(j.id);
+        else loadHistory();
+      }).catch(() => { /* auth expired */ });
+    }, 2500);
+  } else if (n.status === "error") {
+    st.textContent = t("notesFail") + (n.error || t("unknownErr"));
+    rt.classList.remove("hidden");
+  }
+}
+function pollNotes(id) {
+  renderNotesUI({ id, result: { notes: { status: "running" } } });
+}
+$("retryNotes").addEventListener("click", async () => {
+  if (!curId) return;
+  $("retryNotes").disabled = true;
+  try {
+    const r = await api(`/api/jobs/${curId}/notes`, { method: "POST" });
+    if (!r.ok) throw new Error((await r.json()).detail || r.status);
+    pollNotes(curId);
+  } catch (e) {
+    $("notesState").textContent = t("notesFail") + e.message;
+  } finally {
+    $("retryNotes").disabled = false;
+  }
+});
 $("rescene").addEventListener("input", () =>
   $("resceneVal").textContent = Number($("rescene").value).toFixed(3));
 $("repag").addEventListener("click", async () => {
@@ -631,6 +748,8 @@ $("repag").addEventListener("click", async () => {
   fd.append("scene_threshold", $("rescene").value);
   fd.append("correct", (lastJob && lastJob.params && lastJob.params.correct === false) ? "0" : "1");
   fd.append("smartcut", (lastJob && lastJob.params && lastJob.params.smart_cut) ? "1" : "0");
+  fd.append("notes", (lastJob && lastJob.params && lastJob.params.notes) ? "1" : "0");
+  fd.append("notes_lang", (lastJob && lastJob.params && lastJob.params.notes_lang) || "auto");
   try {
     const r = await api("/api/jobs", { method: "POST", body: fd });
     if (!r.ok) throw new Error((await r.json()).detail || r.status);
@@ -644,6 +763,10 @@ $("repag").addEventListener("click", async () => {
 
 $("submit").addEventListener("click", async () => {
   if (!pickedFiles.length) return;
+  if ($("notes").checked && !$("notesLang").value) {
+    $("upErr").textContent = t("notesLangRequired");
+    return;
+  }
   $("submit").disabled = true;
   $("upErr").textContent = "";
   const fd = new FormData();
@@ -653,6 +776,8 @@ $("submit").addEventListener("click", async () => {
   fd.append("scene_threshold", $("scene").value);
   fd.append("correct", $("correct").checked ? "1" : "0");
   fd.append("smartcut", $("smartcut").checked ? "1" : "0");
+  fd.append("notes", $("notes").checked ? "1" : "0");
+  fd.append("notes_lang", $("notesLang").value);
   $("uploadCard").classList.add("hidden");
   $("progressCard").classList.remove("hidden");
   const setUp = (stepKey, frac) => {
@@ -701,9 +826,16 @@ const statusLabel = (s) =>
   I18N[CUR]["st_" + s] || I18N.en["st_" + s] || s;
 
 function renderProg(j) {
-  if (j.status === "error") {
-    $("progStep").innerHTML = '<span class="err">' + esc(t("procFail")) +
-      esc(j.error || t("unknownErr")) + "</span>";
+  if (j.status === "error" || j.status === "interrupted") {
+    $("progStep").innerHTML =
+      '<span class="err">' +
+      esc(j.status === "interrupted" ? t("st_interrupted") + ": " : t("procFail")) +
+      esc(j.error || t("unknownErr")) + "</span>" +
+      (j.status === "interrupted"
+        ? ' <button class="hresume" id="resumeJobBtn">' + esc(t("resumeBtn")) +
+          "</button>" : "");
+    const rb = $("resumeJobBtn");
+    if (rb) rb.addEventListener("click", () => resumeJob(j.id));
     $("progFill").style.background = "var(--bad)";
   } else {
     const key = STEPS[j.step];
@@ -716,6 +848,7 @@ function renderProg(j) {
 
 function poll(id) {
   clearTimeout(pollTimer);
+  clearTimeout(notesTimer);
   lastJob = null;
   $("uploadCard").classList.add("hidden");
   $("progressCard").classList.remove("hidden");
@@ -732,9 +865,20 @@ function poll(id) {
     lastJob = j;
     renderProg(j);
     if (j.status === "done") { showResult(j); loadHistory(); }
-    else if (j.status !== "error") pollTimer = setTimeout(tick, 900);
+    else if (j.status !== "error" && j.status !== "interrupted")
+      pollTimer = setTimeout(tick, 900);
   };
   tick();
+}
+
+async function resumeJob(id) {
+  try {
+    const r = await api("/api/jobs/" + id + "/resume", { method: "POST" });
+    if (!r.ok) throw new Error((await r.json()).detail || String(r.status));
+    poll(id);
+  } catch (e) {
+    alert(e.message);
+  }
 }
 
 function showResult(j) {
@@ -753,6 +897,7 @@ function showResult(j) {
     .replace("{l}", res.language).replace("{n}", res.pages.length);
   $("dlSrt").href = `/api/jobs/${j.id}/export.srt`;
   $("dlMd").href = `/api/jobs/${j.id}/export.md`;
+  renderNotesUI(j);
   const cut = res.smart_cut;
   const ci = $("cutInfo");
   if (cut && cut.removed_seconds > 0) {
@@ -797,13 +942,14 @@ const esc = (t2) => String(t2).replace(/[&<>"]/g,
 
 function resetView() {
   clearTimeout(pollTimer);
+  clearTimeout(notesTimer);
   lastJob = null;
   curId = null;
   $("player").pause(); $("player").src = "";
   $("result").classList.add("hidden");
   $("progressCard").classList.add("hidden");
   $("uploadCard").classList.remove("hidden");
-  $("submit").disabled = pickedFiles.length === 0;
+  updateSubmitState();
 }
 
 $("back").addEventListener("click", () => {
@@ -834,7 +980,9 @@ async function loadHistory() {
       const foot = esc(it.filename) + " · " + esc(statusLabel(it.status)) + own +
         (it.pages ? " · " + it.pages + "p" : "");
       const htitle = (m && m.title_zh) || it.title || it.filename;
-      const canDel = it.status === "done" || it.status === "error";
+      const canDel = it.status === "done" || it.status === "error" ||
+        it.status === "interrupted";
+      const canResume = it.status === "interrupted" && it.pages === 0;
       let inner = `<div class="hdate">${esc(fmtDate(it.created_at))}</div>`;
       inner += `<div class="ht1">${esc(htitle)}</div>`;
       if (m && m.title_en) inner += `<div class="ht2">${esc(m.title_en)}</div>`;
@@ -845,6 +993,7 @@ async function loadHistory() {
       inner += `<div class="hfoot"><span>${foot}</span><span class="hacts">` +
         ((m && (m.summary_zh || m.summary_en))
           ? `<button class="htog" data-i18n="expand"></button>` : "") +
+        (canResume ? `<button class="hresume" data-i18n="resumeBtn"></button>` : "") +
         (canDel ? `<button class="hdel" data-i18n="delBtn"></button>` : "") +
         `</span></div>`;
       card.innerHTML = inner;
@@ -875,6 +1024,16 @@ async function loadHistory() {
             if (curId === it.id) resetView();
             loadHistory();
           }).catch(() => { del.disabled = false; });
+        });
+      }
+      const res = card.querySelector(".hresume");
+      if (res) {
+        res.textContent = t("resumeBtn");
+        res.addEventListener("click", (e) => {
+          e.stopPropagation();
+          res.disabled = true;
+          resumeJob(it.id).then(() => loadHistory())
+            .catch(() => { res.disabled = false; });
         });
       }
       if (it.status === "done" && !m && !metaBusy.has(it.id)) {

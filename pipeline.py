@@ -234,14 +234,21 @@ def detect_scenes(video: Path, threshold: float,
     return sorted(set(times))
 
 
-def load_whisper(size: str):
+def load_whisper(size: str, force_kwargs: Optional[dict] = None):
     with _model_lock:
-        if size in _model_cache:
+        if force_kwargs is not None:
+            _model_cache.pop(size, None)
+            import gc
+            gc.collect()
+            attempts = [force_kwargs]
+        elif size in _model_cache:
             return _model_cache[size]
         from faster_whisper import WhisperModel
         forced_device = os.environ.get("WHISPER_DEVICE")
         forced_compute = os.environ.get("WHISPER_COMPUTE")
-        if forced_device:
+        if force_kwargs is not None:
+            pass
+        elif forced_device:
             attempts = [{"device": forced_device,
                          "compute_type": forced_compute or "int8"}]
         else:
@@ -274,26 +281,87 @@ def load_pcm16_mono(wav: Path) -> "np.ndarray":
     return np.frombuffer(raw, dtype=np.int16).astype(np.float32) / 32768.0
 
 
+def _is_gpu_alloc_error(e: Exception) -> bool:
+    msg = str(e).lower()
+    return (("cublas" in msg or "cudnn" in msg or "cuda" in msg
+             or "out of memory" in msg)
+            and ("alloc" in msg or "failed with status" in msg
+                 or "out of memory" in msg))
+
+
+_SR = 16000  # the WAV we extract is always 16 kHz mono PCM
+
+
 def transcribe(wav: Path, model_size: str, language: str, duration: float,
-               on_frac: Optional[Callable[[float], None]] = None):
+               on_frac: Optional[Callable[[float], None]] = None,
+               checkpoint: Optional[Path] = None):
+    """Transcribe `wav`.
+
+    When `checkpoint` is a file containing a partial transcript (written by a
+    run that was interrupted), transcription resumes from the last segment
+    instead of starting over, so a long lecture survives a server restart.
+    """
     model = load_whisper(model_size)
     audio = load_pcm16_mono(wav)
-    seg_iter, info = model.transcribe(
-        audio,
-        language=None if (not language or language == "auto") else language,
-        vad_filter=True,
-        vad_parameters={"min_silence_duration_ms": 400},
-    )
-    segments: list[dict] = []
-    for s in seg_iter:
-        text = s.text.strip()
-        if not text:
-            continue
-        segments.append({"start": round(s.start, 2),
-                         "end": round(s.end, 2), "text": text})
-        if on_frac:
-            on_frac(s.end / max(duration, 1.0))
-    return segments, info.language
+
+    done: list[dict] = []
+    offset = 0.0
+    if checkpoint and checkpoint.exists():
+        try:
+            data = json.loads(checkpoint.read_text(encoding="utf-8"))
+            done = [s for s in (data.get("segments") or [])
+                    if isinstance(s, dict) and s.get("text")]
+            if done:
+                offset = max(float(s.get("end", 0.0)) for s in done)
+                log.info("Resuming transcription of %s from %.1fs "
+                         "(%d segments saved)", wav, offset, len(done))
+        except Exception as e:  # noqa: BLE001
+            log.warning("Unreadable checkpoint %s: %s", checkpoint, e)
+            done, offset = [], 0.0
+    start = min(int(offset * _SR), len(audio))
+
+    def _save(seg_list: list[dict], lang: str, partial: bool) -> None:
+        if not checkpoint:
+            return
+        payload = {"language": lang, "segments": seg_list}
+        if partial:
+            payload["partial"] = True
+        checkpoint.write_text(json.dumps(payload, ensure_ascii=False),
+                             encoding="utf-8")
+
+    def _run(m):
+        seg_iter, info = m.transcribe(
+            audio[start:],
+            language=None if (not language or language == "auto") else language,
+            vad_filter=True,
+            vad_parameters={"min_silence_duration_ms": 400},
+        )
+        segments: list[dict] = list(done)
+        saved = len(done)
+        for s in seg_iter:
+            text = s.text.strip()
+            if not text:
+                continue
+            segments.append({"start": round(s.start + offset, 2),
+                             "end": round(s.end + offset, 2), "text": text})
+            if on_frac:
+                on_frac((s.end + offset) / max(duration, 1.0))
+            if checkpoint and len(segments) - saved >= 200:
+                saved = len(segments)
+                _save(segments, info.language, True)
+        _save(segments, info.language, False)
+        return segments, info.language
+
+    try:
+        return _run(model)
+    except Exception as e:  # noqa: BLE001
+        if not _is_gpu_alloc_error(e):
+            raise
+        log.warning("Whisper GPU inference failed (%s); retrying on CPU", e)
+        model = load_whisper(model_size,
+                             force_kwargs={"device": "cpu",
+                                           "compute_type": "int8"})
+        return _run(model)
 
 
 def build_pages(segments: list[dict], scene_times: list[float], duration: float,
@@ -353,7 +421,19 @@ def process(video: Path, outdir: Path, model_size: str = "small",
     duration = get_duration(video)
 
     segfile = outdir / "segments.json"
-    reused = reuse_segments and segfile.exists()
+    partial = False
+    complete = False
+    if segfile.exists():
+        try:
+            saved = json.loads(segfile.read_text(encoding="utf-8"))
+            saved_segs = saved if isinstance(saved, list) else (saved.get("segments") or [])
+            partial = bool(saved_segs) and isinstance(saved, dict) and bool(saved.get("partial"))
+            complete = bool(saved_segs) and not partial
+        except Exception:  # noqa: BLE001
+            pass
+    # A finished transcript in the job folder is never thrown away: a resumed
+    # job therefore skips transcription entirely if it had already completed.
+    reused = reuse_segments or complete
 
     p("Detecting slide changes", 0.05)
     scenes = detect_scenes(
@@ -369,17 +449,22 @@ def process(video: Path, outdir: Path, model_size: str = "small",
             segments, lang = data["segments"], data.get("language") or "unknown"
         p("Reusing existing transcript", 0.84)
     else:
-        p("Extracting audio", 0.20)
         wav = outdir / "audio.wav"
-        extract_audio(video, wav)
+        if not partial:
+            segfile.unlink(missing_ok=True)
+            if wav.exists() and wav.stat().st_size > 1000:
+                log.info("Reusing already extracted audio %s", wav)
+            else:
+                p("Extracting audio", 0.20)
+                extract_audio(video, wav)
+        elif not wav.exists():
+            raise RuntimeError("Cannot resume: the extracted audio is missing")
 
         p("Transcribing speech", 0.22)
         segments, lang = transcribe(
             wav, model_size, language, duration,
-            lambda f: p("Transcribing speech", 0.22 + 0.60 * min(f, 1.0)))
-        segfile.write_text(
-            json.dumps({"language": lang, "segments": segments},
-                       ensure_ascii=False, indent=1), encoding="utf-8")
+            lambda f: p("Transcribing speech", 0.22 + 0.60 * min(f, 1.0)),
+            checkpoint=segfile)
 
     p("Splitting pages", 0.84)
     pages = build_pages(segments, scenes, duration)

@@ -32,7 +32,32 @@ clickable to seek the video; SRT / Markdown exports are available.
    new timeline, and the result (`{id}_clip.mp4`) becomes the playable/
    downloadable video. Removed blocks and seconds are reported on the result
    page.
-7. Outputs: page-by-page transcript, page thumbnails, `full.srt`, `transcript.md`
+7. (Optional, off by default) Auto-generate class notes as a **PDF**: the LLM
+   reorganizes the final transcript into **systematic study notes** — it first
+   builds an outline of 2–6 chapters of knowledge topics (definitions,
+   principles, steps, conditions, numbers, examples, comparisons, pitfalls)
+   that may span non-adjacent slides, then writes each topic as synthesized
+   bullets instead of a slide-by-slide log. The notes are **distilled key
+   points paraphrased from the transcript, never copied verbatim**: each topic
+   draft is checked against the transcript for wording similarity and any
+   copy-like draft is rewritten by the LLM (raw transcript sentences are used
+   only as a last resort when the LLM is unreachable). The document has a course overview,
+   key takeaways, a table of contents, and a glossary annotating technical
+   terms; each topic shows the slides it draws on as thumbnails with the topic's
+   time range. The notes language (same as speech / English / 简体中文 /
+   繁體中文 / 日本語) must be chosen when notes are enabled, **before**
+   clicking start — the button stays disabled until a language is picked,
+   and it cannot be changed afterwards. CJK fonts are embedded in the PDF
+   when a suitable TrueType font is installed, otherwise standard Adobe CJK
+   fonts are referenced. The PDF is downloadable from the result page; if
+   generation failed, a retry button re-runs it with the same pre-selected
+   language.
+8. Outputs: page-by-page transcript, page thumbnails, `full.srt`,
+   `transcript.md`, and `notes.pdf` when notes are enabled
+9. Long lectures survive a server restart: the transcript is checkpointed to
+   `segments.json` every 200 segments, so a job interrupted mid-run is listed
+   as **Interrupted** with a **Resume** button, and continuing it transcribes
+   only the part after the checkpoint (the extracted audio is reused as well).
 
 Speech transcription always runs locally; the LLM API is used for transcript
 proofreading and titles.
@@ -118,10 +143,19 @@ All `/api/jobs*` endpoints require a signed-in session cookie (401 otherwise).
 - `POST /api/jobs` (multipart: `files` (repeatable), `model`, `language`,
   `scene_threshold`
   (default 0.03); optional `reuse_from`=<job id> to reuse a transcript and only
-  re-split pages)
+  re-split pages; optional `correct`/`smartcut`/`notes` (0/1) and
+  `notes_lang` — required (non-empty) when `notes=1`:
+  `auto`|`en`|`zh-Hans`|`zh-Hant`|`ja`)
 - `GET /api/jobs` / `GET /api/jobs/{id}` — job list and status
 - `GET /api/jobs/{id}/video` (HTTP Range streaming), `/thumb/{n}`
 - `GET /api/jobs/{id}/export.srt`, `/export.md`
+- `POST /api/jobs/{id}/notes` (no body) — retry notes generation for a
+  finished job using the job's pre-selected `notes_lang`; progress/outcome
+  appear in `result.notes` (`status`: running/done/error, `lang`, `progress`)
+- `GET /api/jobs/{id}/notes.pdf` — download the generated notes PDF
+- `POST /api/jobs/{id}/resume` (no body) — re-run a job that was interrupted by
+  a server restart; transcription continues from the checkpoint in
+  `segments.json`
 
 ## Test video
 

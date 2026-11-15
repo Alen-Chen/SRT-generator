@@ -21,6 +21,7 @@ from fastapi import Body, FastAPI, Form, HTTPException, Request, UploadFile, Fil
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
+from notes import NOTE_LANGS, generate as generate_notes, render_pdf as render_notes_pdf
 from pipeline import (compute_drop_blocks, compute_keep_blocks,
                       cut_video, make_thumbnail, merge_videos, process,
                       shift_time, to_srt)
@@ -310,9 +311,13 @@ def load_persisted() -> None:
             continue
         try:
             job = json.loads(jf.read_text(encoding="utf-8"))
-            if job.get("status") in ("queued", "running"):
-                job["status"] = "error"
-                job["error"] = "Job aborted by server restart"
+            if job.get("status") in ("queued", "running") or (
+                    job.get("status") == "error" and
+                    job.get("error") == "Job aborted by server restart"):
+                # the partial transcript stays on disk so the job can resume
+                job["status"] = "interrupted"
+                job["error"] = ("The server stopped while this job was running. "
+                               "Resume it to continue from the saved checkpoint.")
             jobs[job["id"]] = job
         except Exception:  # noqa: BLE001
             log.exception("Failed to load job: %s", jf)
@@ -370,7 +375,7 @@ def chat(prompt: str, max_tokens: int = 128, temperature: float = 0.3) -> str | 
             r = httpx.post(
                 f"{OPENAI_BASE_URL}/chat/completions",
                 headers={"Authorization": f"Bearer {OPENAI_API_KEY}"},
-                json=payload, timeout=90)
+                json=payload, timeout=120)
             if r.status_code >= 400:
                 log.warning("LLM HTTP %s", r.status_code)
                 continue
@@ -678,10 +683,63 @@ def run_job(job_id: str) -> None:
         save_job(jobs[job_id])
         (outdir / "transcript.md").write_text(build_markdown(jobs[job_id]),
                                               encoding="utf-8")
+        if job["params"].get("notes"):
+            build_notes(job_id, job["params"].get("notes_lang") or "auto")
         log.info("Job %s finished: %s pages", job_id, len(pages))
     except Exception as e:  # noqa: BLE001
         log.exception("Job %s failed", job_id)
         update_job(job_id, status="error", error=str(e))
+
+
+def build_notes(job_id: str, lang: str) -> None:
+    """Generate the class-notes PDF for a finished job; records progress and
+    outcome in result["notes"] (runs on the worker thread)."""
+    with jobs_lock:
+        job = jobs.get(job_id)
+    if not job:
+        return
+    result = job.get("result") or {}
+    pages = result.get("pages") or []
+
+    def set_notes(info: dict) -> None:
+        with jobs_lock:
+            cur = jobs.get(job_id)
+            if not cur:
+                return
+            cur["result"] = {**(cur.get("result") or {}), "notes": info}
+            save_job(cur)
+
+    if not pages:
+        set_notes({"status": "error", "error": "No transcript",
+                   "lang_req": lang})
+        return
+    info: dict = {"status": "running", "lang_req": lang}
+    set_notes(info)
+    try:
+        def prog(f: float) -> None:
+            info["progress"] = round(min(f, 0.999), 3)
+            set_notes(info)
+        doc = generate_notes(result, lang, chat, prog)
+        if not doc:
+            raise RuntimeError("notes generation returned nothing")
+        thumbs = {p["index"]: JOBS / job_id / "pages" / p["thumb"]
+                  for p in pages if p.get("thumb")}
+        pdf = JOBS / job_id / "notes.pdf"
+        render_notes_pdf(doc, {
+            "source": job["filename"],
+            "duration": result.get("duration"),
+            "pages": len(pages),
+            "speech_lang": result.get("language"),
+            "generated": datetime.now().strftime("%Y-%m-%d %H:%M"),
+        }, thumbs, pdf)
+        set_notes({"status": "done", "lang_req": lang, "lang": doc["lang"],
+                   "generated_at": datetime.now().isoformat(timespec="seconds")})
+        log.info("Job %s: class notes PDF generated (%s, %d topics, %d terms)",
+                 job_id, doc["lang"], sum(len(c["topics"]) for c in doc["chapters"]),
+                 len(doc.get("terms") or []))
+    except Exception as e:  # noqa: BLE001
+        log.exception("Job %s notes generation failed", job_id)
+        set_notes({"status": "error", "error": str(e), "lang_req": lang})
 
 
 @app.post("/api/jobs")
@@ -692,12 +750,21 @@ async def create_job(request: Request,
                      scene_threshold: float = Form(0.03),
                      reuse_from: str | None = Form(None),
                      correct: int = Form(1),
-                     smartcut: int = Form(0)) -> JSONResponse:
+                     smartcut: int = Form(0),
+                     notes: int = Form(0),
+                     notes_lang: str = Form("")) -> JSONResponse:
     user = require_user(request)
     if not 0.005 <= scene_threshold <= 0.5:
         raise HTTPException(400, "scene_threshold must be between 0.005 and 0.5")
     if model not in {"tiny", "base", "small", "medium", "large-v3", "large-v3-turbo"}:
         raise HTTPException(400, f"Unsupported model: {model}")
+    if notes and notes_lang not in NOTE_LANGS:
+        raise HTTPException(400, "notes_lang must be one of: "
+                            + ", ".join(NOTE_LANGS))
+    if notes and not notes_lang:
+        raise HTTPException(400, "notes_lang is required when notes are enabled")
+    if not notes_lang:
+        notes_lang = "auto"
 
     job_id = uuid.uuid4().hex[:12]
     (JOBS / job_id).mkdir(parents=True, exist_ok=True)
@@ -753,6 +820,8 @@ async def create_job(request: Request,
                    "reuse_from": reuse_from,
                    "correct": bool(correct),
                    "smart_cut": bool(smartcut),
+                   "notes": bool(notes),
+                   "notes_lang": notes_lang,
                    "parts": parts},
         "result": None,
     }
@@ -823,6 +892,25 @@ def delete_job(job_id: str, request: Request) -> JSONResponse:
     return JSONResponse({"ok": True, "videos": removed})
 
 
+@app.post("/api/jobs/{job_id}/resume")
+def resume_job(job_id: str, request: Request) -> JSONResponse:
+    """Re-run an interrupted job; transcription resumes from its checkpoint."""
+    user = require_user(request)
+    job = get_job_access(job_id, user)
+    if job["status"] != "interrupted":
+        raise HTTPException(400, "Only an interrupted job can be resumed")
+    video = Path(job.get("video_path") or "")
+    if not video.exists():
+        raise HTTPException(404, "The uploaded video is no longer available")
+    with jobs_lock:
+        jobs[job_id].update(status="queued", step="Resuming transcript",
+                            progress=0.0, error=None)
+        save_job(jobs[job_id])
+    worker.submit(run_job, job_id)
+    log.info("Job %s resumed by user %s", job_id, user["username"])
+    return JSONResponse({"ok": True})
+
+
 @app.post("/api/jobs/{job_id}/meta")
 def gen_job_meta(job_id: str, request: Request) -> JSONResponse:
     job = get_job_access(job_id, require_user(request))
@@ -842,9 +930,47 @@ def gen_job_meta(job_id: str, request: Request) -> JSONResponse:
     if not meta:
         raise HTTPException(502, "Meta generation failed")
     with jobs_lock:
+        if job_id not in jobs:
+            raise HTTPException(404, "Job not found")
         jobs[job_id]["result"] = {**(jobs[job_id].get("result") or {}), "meta": meta}
-    save_job(jobs[job_id])
+        save_job(jobs[job_id])
     return JSONResponse(meta)
+
+
+@app.post("/api/jobs/{job_id}/notes")
+def gen_job_notes(job_id: str, request: Request) -> JSONResponse:
+    job = get_job_access(job_id, require_user(request))
+    if job["status"] != "done":
+        raise HTTPException(400, "Job is not finished")
+    if not job["params"].get("notes"):
+        raise HTTPException(400, "Notes were not enabled for this job")
+    lang = job["params"].get("notes_lang") or "auto"
+    if ((job.get("result") or {}).get("notes") or {}).get("status") == "running":
+        raise HTTPException(409, "Notes are already being generated")
+    with jobs_lock:
+        if job_id not in jobs:
+            raise HTTPException(404, "Job not found")
+        jobs[job_id]["result"] = {**(jobs[job_id].get("result") or {}),
+                                  "notes": {"status": "running",
+                                            "lang_req": lang}}
+        save_job(jobs[job_id])
+    worker.submit(build_notes, job_id, lang)
+    return JSONResponse({"ok": True})
+
+
+@app.get("/api/jobs/{job_id}/notes.pdf")
+def job_notes_pdf(job_id: str, request: Request) -> FileResponse:
+    job = get_job_access(job_id, require_user(request))
+    notes = (job.get("result") or {}).get("notes") or {}
+    if notes.get("status") != "done":
+        raise HTTPException(404, "Notes not generated yet")
+    path = JOBS / job_id / "notes.pdf"
+    if not path.exists():
+        raise HTTPException(404, "Notes file not found")
+    stem = job.get("export_stem") or re.sub(
+        r"[^\w\-]+", "_", Path(job["filename"]).stem)[:40]
+    return FileResponse(path, media_type="application/pdf",
+                        filename=f"{stem}_notes.pdf")
 
 
 @app.get("/api/jobs/{job_id}/thumb/{page_index}")
