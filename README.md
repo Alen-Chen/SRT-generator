@@ -47,9 +47,13 @@ clickable to seek the video; SRT / Markdown exports are available.
    time range. The notes language (same as speech / English / 简体中文 /
    繁體中文 / 日本語) must be chosen when notes are enabled, **before**
    clicking start — the button stays disabled until a language is picked,
-   and it cannot be changed afterwards. CJK fonts are embedded in the PDF
-   when a suitable TrueType font is installed, otherwise standard Adobe CJK
-   fonts are referenced. The PDF is downloadable from the result page; if
+   and it cannot be changed afterwards. The notes font is also selectable
+   (auto / Noto Serif TC 思源宋體 / LXGW WenKai 霞鶩文楷 / AR PL UMing 明體);
+   the auto choice uses **Noto Serif TC** for Traditional Chinese — bundled
+   under `fonts/` (gitignored, OFL licensed) — so glyphs follow the Taiwan
+   MOE standard (e.g. 床, not the Japanese form 牀). Other CJK fonts are
+   embedded from the system when a suitable TrueType font is installed,
+   otherwise standard Adobe CJK fonts are referenced. The PDF is downloadable from the result page; if
    generation failed, a retry button re-runs it with the same pre-selected
    language.
 8. Outputs: page-by-page transcript, page thumbnails, `full.srt`,

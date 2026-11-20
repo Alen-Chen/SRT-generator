@@ -53,20 +53,58 @@ _BOLD_CANDIDATES = {
 _CID_FALLBACK = {"latin": "Helvetica", "zh-Hans": "STSong-Light",
                  "zh-Hant": "MSung-Light", "ja": "HeiseiMin-W3",
                  "ko": "HYSMyeongJo-Medium"}
-_font_cache: dict[str, tuple[str, str]] = {}
+
+# downloadable TrueType families (fonts/ dir, OFL licensed). Noto Serif TC
+# follows the Taiwan MOE standard, so e.g. 床 does not fall back to the
+# Japanese form 牀 the way AR PL UMing does.
+FONTS_DIR = Path(__file__).resolve().parent / "fonts"
+NOTE_FONTS = {
+    "auto": "Auto (by language)",
+    "noto-serif-tc": "Noto Serif TC · 思源宋體",
+    "lxgw-wenkai": "LXGW WenKai · 霞鶩文楷",
+    "ming": "AR PL UMing · 明體",
+}
+_FAMILY_FILES = {  # key -> (regular file, bold file) under FONTS_DIR
+    "noto-serif-tc": ("NotoSerifTC-Regular.ttf", "NotoSerifTC-Bold.ttf"),
+    "lxgw-wenkai": ("LXGWWenKai-Regular.ttf", "LXGWWenKai-Medium.ttf"),
+}
+# the "auto" choice prefers these downloaded faces for Traditional Chinese
+_AUTO_PREFERRED = {
+    "zh-Hant": [("NotoSerifTC-Regular.ttf", "NotoSerifTC-Bold.ttf")],
+}
+_font_cache: dict[tuple[str, str], tuple[str, str]] = {}
 
 
-def _register_fonts(script: str) -> tuple[str, str]:
-    """Return (regular, bold) font names for a script, registering once."""
-    if script in _font_cache:
-        return _font_cache[script]
+def _font_candidates(script: str, font: str) -> tuple[list, list]:
+    """(regular, bold) candidate lists of (path, subfontIndex) to try."""
+    family = _FAMILY_FILES.get(font)
+    if family:
+        reg, bld = family
+        return ([(str(FONTS_DIR / reg), 0)], [(str(FONTS_DIR / bld), 0)])
+    regular: list = []
+    bold: list = []
+    if font == "auto":
+        for reg, bld in _AUTO_PREFERRED.get(script, []):
+            regular.append((str(FONTS_DIR / reg), 0))
+            bold.append((str(FONTS_DIR / bld), 0))
+    regular += _TTF_CANDIDATES.get(script, [])
+    bold += _BOLD_CANDIDATES.get(script, [])
+    return regular, bold
+
+
+def _register_fonts(script: str, font: str = "auto") -> tuple[str, str]:
+    """Return (regular, bold) font names for a script + family, once."""
+    key = (script, font)
+    if key in _font_cache:
+        return _font_cache[key]
     from reportlab.pdfbase import pdfmetrics
     from reportlab.pdfbase.cidfonts import UnicodeCIDFont
     from reportlab.pdfbase.ttfonts import TTFont
     regular = bold = ""
-    for i, (path, idx) in enumerate(_TTF_CANDIDATES.get(script, [])):
+    regulars, bolds = _font_candidates(script, font)
+    for i, (path, idx) in enumerate(regulars):
         try:
-            name = f"notes_{script}_{i}"
+            name = f"notes_{font}_{script}_{i}"
             if not Path(path).exists():
                 continue
             pdfmetrics.registerFont(TTFont(name, path, subfontIndex=idx))
@@ -74,10 +112,24 @@ def _register_fonts(script: str) -> tuple[str, str]:
             break
         except Exception as e:  # noqa: BLE001
             log.warning("Notes font %s unusable: %s", path, e)
-    if regular:
-        for path, idx in _BOLD_CANDIDATES.get(script, []):
+    if not regular and font != "auto":  # selected family missing on disk
+        log.warning("Notes font %s unavailable for %s, falling back to auto",
+                    font, script)
+        regulars, bolds = _font_candidates(script, "auto")
+        for i, (path, idx) in enumerate(regulars):
             try:
-                name = f"notes_{script}_b"
+                name = f"notes_auto_{script}_fb{i}"
+                if not Path(path).exists():
+                    continue
+                pdfmetrics.registerFont(TTFont(name, path, subfontIndex=idx))
+                regular = name
+                break
+            except Exception:  # noqa: BLE001
+                continue
+    if regular:
+        for i, (path, idx) in enumerate(bolds):
+            try:
+                name = f"notes_{font}_{script}_b{i}"
                 pdfmetrics.registerFont(TTFont(name, path, subfontIndex=idx))
                 bold = name
                 break
@@ -92,7 +144,7 @@ def _register_fonts(script: str) -> tuple[str, str]:
             regular = bold = fallback
         except Exception:  # noqa: BLE001
             regular = bold = "Helvetica"
-    _font_cache[script] = (regular, bold)
+    _font_cache[key] = (regular, bold)
     return regular, bold
 
 
@@ -556,7 +608,7 @@ _HDR = {
 
 
 def render_pdf(notes: dict, meta: dict, thumbs: dict[int, Path],
-               out_pdf: Path) -> None:
+               out_pdf: Path, font: str = "auto") -> None:
     """Render the notes dict into a PDF. `thumbs` maps slide index -> image."""
     from reportlab.lib import colors
     from reportlab.lib.pagesizes import A4
@@ -568,7 +620,7 @@ def render_pdf(notes: dict, meta: dict, thumbs: dict[int, Path],
                                     TableStyle)
 
     script = notes.get("script") or "latin"
-    body, bold = _register_fonts(script)
+    body, bold = _register_fonts(script, font if font in NOTE_FONTS else "auto")
     hdr = _HDR.get(script, _HDR["latin"])
     grey = colors.HexColor("#5b6b80")
     line = colors.HexColor("#d5dbe3")

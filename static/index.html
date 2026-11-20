@@ -222,6 +222,13 @@ border-radius:8px;background:var(--acc2);color:var(--acc);cursor:pointer}
           <option value="zh-Hant" data-i18n="nlang_zhHant"></option>
           <option value="ja" data-i18n="nlang_ja"></option>
         </select></label>
+      <label class="hidden" id="notesFontWrap"><span data-i18n="notesFont"></span>
+        <select id="notesFont">
+          <option value="auto" selected data-i18n="notesFontAuto"></option>
+          <option value="noto-serif-tc">Noto Serif TC · 思源宋體</option>
+          <option value="lxgw-wenkai">LXGW WenKai · 霞鶩文楷</option>
+          <option value="ming">AR PL UMing · 明體</option>
+        </select></label>
     </div>
     <button class="primary" id="submit" disabled data-i18n="start"></button>
     <p class="muted" id="upErr"></p>
@@ -320,6 +327,7 @@ nlang_auto: "Same as speech", nlang_en: "English", nlang_zhHans: "简体中文",
 nlang_zhHant: "繁體中文", nlang_ja: "日本語",
 notesLangPick: "(select language)", retryNotes: "Retry notes",
 notesLangRequired: "Please choose the notes language before starting.",
+ notesFont: "Notes font", notesFontAuto: "Auto (by language)",
 dlNotes: "Download notes PDF", notesGenerating: "Generating class notes…",
 notesReady: "Notes ready", notesFail: "Notes generation failed: ",
 authTitle: "Sign in to continue", username: "Username", password: "Password",
@@ -378,6 +386,7 @@ nlang_auto: "跟隨語音語言", nlang_en: "English", nlang_zhHans: "简体中�
 nlang_zhHant: "繁體中文", nlang_ja: "日本語",
 notesLangPick: "（選擇語言）", retryNotes: "重試產生筆記",
 notesLangRequired: "開始處理前請先選擇筆記語言。",
+ notesFont: "筆記字體", notesFontAuto: "自動（依語言）",
 dlNotes: "下載筆記 PDF", notesGenerating: "筆記產生中…",
 notesReady: "筆記已就緒", notesFail: "筆記產生失敗：",
 authTitle: "登入以繼續", username: "帳號", password: "密碼",
@@ -436,6 +445,7 @@ nlang_auto: "跟随语音语言", nlang_en: "English", nlang_zhHans: "简体中�
 nlang_zhHant: "繁體中文", nlang_ja: "日本語",
 notesLangPick: "（选择语言）", retryNotes: "重试生成笔记",
 notesLangRequired: "开始处理前请先选择笔记语言。",
+ notesFont: "笔记字体", notesFontAuto: "自动（按语言）",
 dlNotes: "下载笔记 PDF", notesGenerating: "笔记生成中…",
 notesReady: "笔记已就绪", notesFail: "笔记生成失败：",
 authTitle: "登录以继续", username: "账号", password: "密码",
@@ -494,6 +504,7 @@ nlang_auto: "音声言語に合わせる", nlang_en: "English", nlang_zhHans: "�
 nlang_zhHant: "繁體中文", nlang_ja: "日本語",
 notesLangPick: "（言語を選択）", retryNotes: "ノートを再試行",
 notesLangRequired: "処理開始前にノートの言語を選択してください。",
+ notesFont: "ノートのフォント", notesFontAuto: "自動（言語別）",
 dlNotes: "ノート PDF をダウンロード", notesGenerating: "ノートを生成中…",
 notesReady: "ノート完成", notesFail: "ノート生成失敗：",
 authTitle: "ログインしてください", username: "ユーザー名", password: "パスワード",
@@ -684,6 +695,7 @@ $("scene").addEventListener("input", () =>
   $("sceneVal").textContent = Number($("scene").value).toFixed(3));
 $("notes").addEventListener("change", () => {
   $("notesLangWrap").classList.toggle("hidden", !$("notes").checked);
+  $("notesFontWrap").classList.toggle("hidden", !$("notes").checked);
   updateSubmitState();
 });
 $("notesLang").addEventListener("change", updateSubmitState);
@@ -750,6 +762,7 @@ $("repag").addEventListener("click", async () => {
   fd.append("smartcut", (lastJob && lastJob.params && lastJob.params.smart_cut) ? "1" : "0");
   fd.append("notes", (lastJob && lastJob.params && lastJob.params.notes) ? "1" : "0");
   fd.append("notes_lang", (lastJob && lastJob.params && lastJob.params.notes_lang) || "auto");
+  fd.append("notes_font", (lastJob && lastJob.params && lastJob.params.notes_font) || $("notesFont").value || "auto");
   try {
     const r = await api("/api/jobs", { method: "POST", body: fd });
     if (!r.ok) throw new Error((await r.json()).detail || r.status);
@@ -778,6 +791,7 @@ $("submit").addEventListener("click", async () => {
   fd.append("smartcut", $("smartcut").checked ? "1" : "0");
   fd.append("notes", $("notes").checked ? "1" : "0");
   fd.append("notes_lang", $("notesLang").value);
+  fd.append("notes_font", $("notesFont").value || "auto");
   $("uploadCard").classList.add("hidden");
   $("progressCard").classList.remove("hidden");
   const setUp = (stepKey, frac) => {

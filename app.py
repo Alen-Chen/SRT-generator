@@ -21,7 +21,8 @@ from fastapi import Body, FastAPI, Form, HTTPException, Request, UploadFile, Fil
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
-from notes import NOTE_LANGS, generate as generate_notes, render_pdf as render_notes_pdf
+from notes import (NOTE_FONTS, NOTE_LANGS, generate as generate_notes,
+                   render_pdf as render_notes_pdf)
 from pipeline import (compute_drop_blocks, compute_keep_blocks,
                       cut_video, make_thumbnail, merge_videos, process,
                       shift_time, to_srt)
@@ -684,14 +685,15 @@ def run_job(job_id: str) -> None:
         (outdir / "transcript.md").write_text(build_markdown(jobs[job_id]),
                                               encoding="utf-8")
         if job["params"].get("notes"):
-            build_notes(job_id, job["params"].get("notes_lang") or "auto")
+            build_notes(job_id, job["params"].get("notes_lang") or "auto",
+                        job["params"].get("notes_font") or "auto")
         log.info("Job %s finished: %s pages", job_id, len(pages))
     except Exception as e:  # noqa: BLE001
         log.exception("Job %s failed", job_id)
         update_job(job_id, status="error", error=str(e))
 
 
-def build_notes(job_id: str, lang: str) -> None:
+def build_notes(job_id: str, lang: str, font: str = "auto") -> None:
     """Generate the class-notes PDF for a finished job; records progress and
     outcome in result["notes"] (runs on the worker thread)."""
     with jobs_lock:
@@ -713,7 +715,7 @@ def build_notes(job_id: str, lang: str) -> None:
         set_notes({"status": "error", "error": "No transcript",
                    "lang_req": lang})
         return
-    info: dict = {"status": "running", "lang_req": lang}
+    info: dict = {"status": "running", "lang_req": lang, "font": font}
     set_notes(info)
     try:
         def prog(f: float) -> None:
@@ -731,15 +733,17 @@ def build_notes(job_id: str, lang: str) -> None:
             "pages": len(pages),
             "speech_lang": result.get("language"),
             "generated": datetime.now().strftime("%Y-%m-%d %H:%M"),
-        }, thumbs, pdf)
+        }, thumbs, pdf, font=font)
         set_notes({"status": "done", "lang_req": lang, "lang": doc["lang"],
+                   "font": font,
                    "generated_at": datetime.now().isoformat(timespec="seconds")})
         log.info("Job %s: class notes PDF generated (%s, %d topics, %d terms)",
                  job_id, doc["lang"], sum(len(c["topics"]) for c in doc["chapters"]),
                  len(doc.get("terms") or []))
     except Exception as e:  # noqa: BLE001
         log.exception("Job %s notes generation failed", job_id)
-        set_notes({"status": "error", "error": str(e), "lang_req": lang})
+        set_notes({"status": "error", "error": str(e), "lang_req": lang,
+                   "font": font})
 
 
 @app.post("/api/jobs")
@@ -752,7 +756,8 @@ async def create_job(request: Request,
                      correct: int = Form(1),
                      smartcut: int = Form(0),
                      notes: int = Form(0),
-                     notes_lang: str = Form("")) -> JSONResponse:
+                     notes_lang: str = Form(""),
+                     notes_font: str = Form("auto")) -> JSONResponse:
     user = require_user(request)
     if not 0.005 <= scene_threshold <= 0.5:
         raise HTTPException(400, "scene_threshold must be between 0.005 and 0.5")
@@ -765,6 +770,9 @@ async def create_job(request: Request,
         raise HTTPException(400, "notes_lang is required when notes are enabled")
     if not notes_lang:
         notes_lang = "auto"
+    if notes_font not in NOTE_FONTS:
+        raise HTTPException(400, "notes_font must be one of: "
+                            + ", ".join(NOTE_FONTS))
 
     job_id = uuid.uuid4().hex[:12]
     (JOBS / job_id).mkdir(parents=True, exist_ok=True)
@@ -822,6 +830,7 @@ async def create_job(request: Request,
                    "smart_cut": bool(smartcut),
                    "notes": bool(notes),
                    "notes_lang": notes_lang,
+                   "notes_font": notes_font,
                    "parts": parts},
         "result": None,
     }
@@ -945,6 +954,7 @@ def gen_job_notes(job_id: str, request: Request) -> JSONResponse:
     if not job["params"].get("notes"):
         raise HTTPException(400, "Notes were not enabled for this job")
     lang = job["params"].get("notes_lang") or "auto"
+    font = job["params"].get("notes_font") or "auto"
     if ((job.get("result") or {}).get("notes") or {}).get("status") == "running":
         raise HTTPException(409, "Notes are already being generated")
     with jobs_lock:
@@ -952,9 +962,9 @@ def gen_job_notes(job_id: str, request: Request) -> JSONResponse:
             raise HTTPException(404, "Job not found")
         jobs[job_id]["result"] = {**(jobs[job_id].get("result") or {}),
                                   "notes": {"status": "running",
-                                            "lang_req": lang}}
+                                            "lang_req": lang, "font": font}}
         save_job(jobs[job_id])
-    worker.submit(build_notes, job_id, lang)
+    worker.submit(build_notes, job_id, lang, font)
     return JSONResponse({"ok": True})
 
 
