@@ -214,33 +214,61 @@ _S2T = {p[0]: p[1] for p in _ZH_PAIRS}   # traditional -> simplified
 _T2S = {p[1]: p[0] for p in _ZH_PAIRS}   # simplified -> traditional
 
 
+# opencc's s2t maps 床 to its old variant 牀, but 床 is the customary
+# Traditional form (牀 reads as a Japanese/orthographic variant), so any
+# notes/subtitle text is fixed back after script conversion.
+_GLYPH_FIX = str.maketrans({"牀": "床"})
+
+
+def _fix_glyphs(text: str) -> str:
+    return text.translate(_GLYPH_FIX)
+
+
+def ensure_traditional(segments: list[dict]) -> int:
+    """Rewrite Simplified Chinese transcript lines in Traditional form.
+
+    Whisper emits Simplified Chinese for zh; the product wants Traditional
+    subtitles whenever the speech is Chinese. Returns the number of lines
+    changed. Safe to call repeatedly."""
+    changed = 0
+    for s in segments:
+        t = _fix_glyphs(normalize_script(s.get("text") or "", "zh-Hant"))
+        if t and t != s["text"]:
+            s["text"] = t
+            changed += 1
+    return changed
+
+
 def normalize_script(text: str, script: str) -> str:
     """Force a Chinese string into one script so the notes stay consistent."""
     if not text or script not in ("zh-Hant", "zh-Hans"):
         return text
     if _CC:
-        return _CC[script].convert(text)
+        return _fix_glyphs(_CC[script].convert(text))
     table = _T2S if script == "zh-Hant" else _S2T
-    return "".join(table.get(ch, ch) for ch in text)
+    return _fix_glyphs("".join(table.get(ch, ch) for ch in text))
 
 
 def _normalize_doc(doc: dict) -> dict:
-    """Normalize every LLM-written string of the document to one script."""
+    """Normalize every LLM-written string of the document to one script and
+    the customary glyph forms (牀 -> 床 applies to all languages)."""
     script = doc.get("script") or ""
-    if script not in ("zh-Hant", "zh-Hans"):
-        return doc
-    doc["title"] = normalize_script(doc.get("title", ""), script)
-    doc["overview"] = normalize_script(doc.get("overview", ""), script)
-    doc["takeaways"] = [normalize_script(x, script) for x in doc.get("takeaways", [])]
+
+    def fix(x: str) -> str:
+        return _fix_glyphs(normalize_script(x, script))
+
+    doc["title"] = fix(doc.get("title", ""))
+    doc["overview"] = fix(doc.get("overview", ""))
+    doc["takeaways"] = [fix(x) for x in doc.get("takeaways", [])]
     for ch in doc.get("chapters", []):
-        ch["title"] = normalize_script(ch.get("title", ""), script)
+        ch["title"] = fix(ch.get("title", ""))
         for topic in ch.get("topics", []):
-            topic["title"] = normalize_script(topic.get("title", ""), script)
+            topic["title"] = fix(topic.get("title", ""))
             for b in topic.get("blocks", []):
-                b["t"] = normalize_script(b["t"], script)
+                b["t"] = fix(b["t"])
     for t in doc.get("terms", []):
-        t["t"] = normalize_script(t["t"], script)
-        t["d"] = normalize_script(t["d"], script)
+        t["t"] = fix(t["t"])
+        t["d"] = fix(t["d"])
     return doc
 
 

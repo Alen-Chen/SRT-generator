@@ -21,8 +21,8 @@ from fastapi import Body, FastAPI, Form, HTTPException, Request, UploadFile, Fil
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
-from notes import (NOTE_FONTS, NOTE_LANGS, generate as generate_notes,
-                   render_pdf as render_notes_pdf)
+from notes import (NOTE_FONTS, NOTE_LANGS, ensure_traditional,
+                   generate as generate_notes, render_pdf as render_notes_pdf)
 from pipeline import (compute_drop_blocks, compute_keep_blocks,
                       cut_video, make_thumbnail, merge_videos, process,
                       shift_time, to_srt)
@@ -661,6 +661,22 @@ def run_job(job_id: str) -> None:
                            ensure_ascii=False, indent=1), encoding="utf-8")
             log.info("Job %s proofread (2-round): %d/%d lines changed", job_id,
                      changed, len(result["segments"]))
+
+        # Whisper transcribes Chinese in Simplified; when the speech is
+        # Chinese (chosen or detected), deliver subtitles in Traditional.
+        sel_lang = str(job["params"].get("language") or "auto").lower()
+        det_lang = str(result.get("language") or "").lower()
+        if sel_lang in ("zh", "zh-tw", "zh-hant", "yue") or \
+                det_lang.split("-")[0] in ("zh", "yue"):
+            n = ensure_traditional(result["segments"])
+            (outdir / "segments.json").write_text(
+                json.dumps({"language": result["language"],
+                            "segments": result["segments"]},
+                           ensure_ascii=False, indent=1), encoding="utf-8")
+            if n:
+                log.info("Job %s: rewrote %d/%d subtitle lines to "
+                         "Traditional Chinese", job_id,
+                         n, len(result["segments"]))
 
         set_progress(job_id, "Generating page titles", 0.955)
         with ThreadPoolExecutor(max_workers=4) as pool:

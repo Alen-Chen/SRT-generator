@@ -396,7 +396,62 @@ def make_thumbnail(video: Path, t: float, out: Path) -> bool:
     return r.returncode == 0 and out.exists() and out.stat().st_size > 0
 
 
+_SRT_LINE = {"cjk": 16, "latin": 42}   # wrap width per line
+_SRT_MAX_LINES = 2                      # lines per cue
+_SRT_MIN_CUE = 0.5                      # min seconds a split cue may show
+
+
+def _is_cjk_text(t: str) -> bool:
+    return any('\u3040' <= c <= '\u30ff' or '\u4e00' <= c <= '\u9fff'
+               or '\uac00' <= c <= '\ud7af' for c in t)
+
+
+def _split_units(text: str, latin: bool) -> list[str]:
+    """Cut text into atomic pieces at spaces (latin) or punctuation (cjk),
+    keeping the separator attached to the piece before it."""
+    units, buf = [], ""
+    breaks = " " if latin else "，。！？；：、,.!?;: "
+    for ch in text:
+        buf += ch
+        if ch in breaks:
+            units.append(buf)
+            buf = ""
+    if buf:
+        units.append(buf)
+    return [u for u in units if u.strip()]
+
+
+def _wrap_lines(units: list[str], width: int) -> list[str]:
+    """Greedily pack units into lines no wider than `width` characters."""
+    lines: list[str] = []
+    cur, n = "", 0
+    for u in units:
+        s = u.strip()
+        if len(s) > width:  # oversized word: flush, then hard-split it
+            if cur.strip():
+                lines.append(cur.strip())
+                cur, n = "", 0
+            while len(s) > width:
+                lines.append(s[:width])
+                s = s[width:]
+            if not s:
+                continue
+            u = s  # only the leftover part joins the next line
+        w = len(u)  # count the separator too: it ends up inside the line
+        if cur and n + w > width:
+            lines.append(cur.strip())
+            cur, n = u, w
+        else:
+            cur, n = cur + u, n + w
+    if cur.strip():
+        lines.append(cur.strip())
+    return lines
+
+
 def to_srt(segments: list[dict]) -> str:
+    """Render player-friendly SRT: every cue is at most 2 short lines, and a
+    segment longer than that is split into several cues whose timestamps are
+    distributed proportionally to the number of characters shown."""
     def ts(sec: float) -> str:
         ms = int(round(sec * 1000))
         h, ms = divmod(ms, 3600000)
@@ -404,9 +459,36 @@ def to_srt(segments: list[dict]) -> str:
         s, ms = divmod(ms, 1000)
         return f"{h:02d}:{m:02d}:{s:02d},{ms:03d}"
 
-    blocks = []
-    for i, seg in enumerate(segments, 1):
-        blocks.append(f"{i}\n{ts(seg['start'])} --> {ts(seg['end'])}\n{seg['text']}\n")
+    blocks: list[str] = []
+    idx = 1
+    for seg in segments:
+        text = (seg.get("text") or "").strip()
+        if not text:
+            continue
+        latin = not _is_cjk_text(text)
+        lines = _wrap_lines(_split_units(text, latin), _SRT_LINE["latin" if latin else "cjk"])
+        if not lines:
+            continue
+        cues: list[list[str]] = [lines[i:i + _SRT_MAX_LINES]
+                                 for i in range(0, len(lines), _SRT_MAX_LINES)]
+        starts = [float(seg["start"])]
+        if len(cues) > 1:  # proportional timing so each cue stays readable
+            dur = max(float(seg["end"]) - float(seg["start"]),
+                      _SRT_MIN_CUE * len(cues))
+            weights = [max(1, sum(len(l) for l in c)) for c in cues]
+            acc, total = 0.0, sum(weights)
+            for w in weights[:-1]:
+                acc += dur * w / total
+                starts.append(float(seg["start"])
+                              + min(acc, dur - _SRT_MIN_CUE))
+        for ci, cue in enumerate(cues):
+            t = starts[ci]
+            t1 = (float(seg["end"]) if ci == len(cues) - 1 else starts[ci + 1])
+            if t1 - t < 0.05:
+                t1 = t + 0.05
+            blocks.append(f"{idx}\n{ts(t)} --> {ts(t1)}\n"
+                          + "\n".join(cue) + "\n")
+            idx += 1
     return "\n".join(blocks)
 
 

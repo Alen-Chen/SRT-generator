@@ -12,7 +12,9 @@ clickable to seek the video; SRT / Markdown exports are available.
    (default threshold 0.03, adjustable in the UI)
 2. Audio is extracted as 16 kHz mono
 3. `faster-whisper` transcribes the speech locally (GPU/CPU auto-selected; falls
-   back to CPU int8 when the GPU is full)
+   back to CPU int8 when the GPU is full). Chinese speech is delivered as
+   **Traditional** subtitles: Whisper returns Simplified, so every line is
+   converted with OpenCC (with a glyph fix so 床 never comes out as 牀)
 4. (Optional, on by default) Two-round LLM transcript correction:
    - Round 1: ASR output is kept as-is as a draft transcript
    - The draft is sent to the LLM to write a correction guide (lecture summary,
@@ -44,7 +46,9 @@ clickable to seek the video; SRT / Markdown exports are available.
    only as a last resort when the LLM is unreachable). The document has a course overview,
    key takeaways, a table of contents, and a glossary annotating technical
    terms; each topic shows the slides it draws on as thumbnails with the topic's
-   time range. The notes language (same as speech / English / 简体中文 /
+   time range. Every string is normalized to a single script (OpenCC) and to
+   customary glyph forms (牀 is always rewritten to 床, even in English or
+   Japanese notes). The notes language (same as speech / English / 简体中文 /
    繁體中文 / 日本語) must be chosen when notes are enabled, **before**
    clicking start — the button stays disabled until a language is picked,
    and it cannot be changed afterwards. The notes font is also selectable
